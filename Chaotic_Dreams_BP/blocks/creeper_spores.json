@@ -1,0 +1,286 @@
+{
+  "format_version": "1.21.80",
+  "minecraft:block": {
+    "description": {
+      "identifier": "cookiedookie:creeper_spores",
+      "states": {
+        "cookiedookie:rotation": [ "0", "90", "180", "270" ],
+        "cookiedookie:age": { "values": { "min": 0, "max": 7 } }
+      }
+    },
+    "permutations": [
+      {
+        "condition": "query.block_state('cookiedookie:rotation') == '0'",
+        "components": { "minecraft:transformation": { "rotation": [ 0, 0, 0 ] } }
+      },
+      {
+        "condition": "query.block_state('cookiedookie:rotation') == '90'",
+        "components": { "minecraft:transformation": { "rotation": [ 0, 90, 0 ] } }
+      },
+      {
+        "condition": "query.block_state('cookiedookie:rotation') == '180'",
+        "components": { "minecraft:transformation": { "rotation": [ 0, 180, 0 ] } }
+      },
+      {
+        "condition": "query.block_state('cookiedookie:rotation') == '270'",
+        "components": { "minecraft:transformation": { "rotation": [ 0, 270, 0 ] } }
+      },
+      {
+        "condition": "query.block_state('cookiedookie:age') == 0",
+        "components": {
+          "minecraft:destructible_by_explosion": {
+            "explosion_resistance": 3.75
+          },
+          "minecraft:destructible_by_mining": {
+            "seconds_to_destroy": 1.25
+          },
+          "minecraft:destruction_particles": {
+            "texture": "cookiedookie:creeper_spores.age_0"
+          },
+          "minecraft:geometry": {
+            "identifier": "geometry.creeper_spores.age_0"
+          },
+          "minecraft:material_instances": {
+            "*": {
+              "ambient_occlusion": false,
+              "face_dimming": true,
+              "render_method": "alpha_test_single_sided",
+              "texture": "cookiedookie:creeper_spores.age_0"
+            }
+          },
+          "minecraft:selection_box": {
+            "origin": [ -8, 0, -8 ],
+            "size": [ 16, 1, 16 ]
+          }
+        }
+      },
+      {
+        "condition": "query.block_state('cookiedookie:age') == 1",
+        "components": {
+          "minecraft:destructible_by_explosion": {
+            "explosion_resistance": 7.5
+          },
+          "minecraft:destructible_by_mining": {
+            "seconds_to_destroy": 2.5
+          },
+          "minecraft:destruction_particles": {
+            "texture": "cookiedookie:creeper_spores"
+          },
+          "minecraft:geometry": {
+            "identifier": "geometry.creeper_spores.age_1"
+          },
+          "minecraft:material_instances": {
+            "*": {
+              "ambient_occlusion": false,
+              "face_dimming": true,
+              "render_method": "alpha_test_single_sided",
+              "texture": "cookiedookie:creeper_spores.age_1"
+            }
+          },
+          "minecraft:selection_box": {
+            "origin": [ -5, 0, -5 ],
+            "size": [ 10, 1, 10 ]
+          }
+        }
+      },
+      {
+        "condition": "query.block_state('cookiedookie:age') == 2",
+        "components": {
+          "minecraft:destructible_by_explosion": {
+            "explosion_resistance": 11.25
+          },
+          "minecraft:destructible_by_mining": {
+            "seconds_to_destroy": 3.75
+          },
+          "minecraft:destruction_particles": {
+            "texture": "cookiedookie:creeper_spores"
+          },
+          "minecraft:geometry": {
+            "identifier": "geometry.creeper_spores.age_2"
+          },
+          "minecraft:material_instances": {
+            "*": {
+              "ambient_occlusion": false,
+              "face_dimming": true,
+              "render_method": "alpha_test_single_sided",
+              "texture": "cookiedookie:creeper_spores.age_2"
+            }
+          },
+          "minecraft:selection_box": {
+            "origin": [ -2, 0, -2 ],
+            "size": [ 4, 5, 4 ]
+          }
+        }
+      },
+      {
+        "condition": "query.block_state('cookiedookie:age') == 3",
+        "components": {
+          "minecraft:destructible_by_explosion": {
+            "explosion_resistance": 15
+          },
+          "minecraft:destructible_by_mining": {
+            "seconds_to_destroy": 5
+          },
+          "minecraft:destruction_particles": {
+            "texture": "cookiedookie:creeper_spores"
+          },
+          "minecraft:geometry": {
+            "identifier": "geometry.creeper_spores.age_3"
+          },
+          "minecraft:material_instances": {
+            "*": {
+              "ambient_occlusion": false,
+              "face_dimming": true,
+              "render_method": "alpha_test_single_sided",
+              "texture": "cookiedookie:creeper_spores.age_3"
+            }
+          },
+          "minecraft:selection_box": {
+            "origin": [ -2.5, 0, -2.5 ],
+            "size": [ 5, 8, 5 ]
+          }
+        }
+      },
+      {
+        "condition": "query.block_state('cookiedookie:age') == 4",
+        "components": {
+          "minecraft:destructible_by_explosion": {
+            "explosion_resistance": 18.75
+          },
+          "minecraft:destructible_by_mining": {
+            "seconds_to_destroy": 6.25
+          },
+          "minecraft:destruction_particles": {
+            "texture": "cookiedookie:creeper_spores"
+          },
+          "minecraft:geometry": {
+            "identifier": "geometry.creeper_spores.age_4"
+          },
+          "minecraft:material_instances": {
+            "*": {
+              "ambient_occlusion": false,
+              "face_dimming": true,
+              "render_method": "alpha_test_single_sided",
+              "texture": "cookiedookie:creeper_spores.age_4"
+            }
+          },
+          "minecraft:selection_box": {
+            "origin": [ -3, 0, -3 ],
+            "size": [ 6, 13, 6 ]
+          }
+        }
+      },
+      {
+        "condition": "query.block_state('cookiedookie:age') == 5",
+        "components": {
+          "minecraft:destructible_by_explosion": {
+            "explosion_resistance": 22.5
+          },
+          "minecraft:destructible_by_mining": {
+            "seconds_to_destroy": 7.5
+          },
+          "minecraft:destruction_particles": {
+            "texture": "cookiedookie:creeper_spores"
+          },
+          "minecraft:geometry": {
+            "identifier": "geometry.creeper_spores.age_5"
+          },
+          "minecraft:material_instances": {
+            "*": {
+              "ambient_occlusion": false,
+              "face_dimming": true,
+              "render_method": "alpha_test_single_sided",
+              "texture": "cookiedookie:creeper_spores.age_5"
+            }
+          },
+          "minecraft:selection_box": {
+            "origin": [ -4, 0, -4 ],
+            "size": [ 8, 16, 8 ]
+          }
+        }
+      },
+      {
+        "condition": "query.block_state('cookiedookie:age') == 6",
+        "components": {
+          "minecraft:destructible_by_explosion": {
+            "explosion_resistance": 26.25
+          },
+          "minecraft:destructible_by_mining": {
+            "seconds_to_destroy": 8.75
+          },
+          "minecraft:destruction_particles": {
+            "texture": "cookiedookie:creeper_spores"
+          },
+          "minecraft:geometry": {
+            "identifier": "geometry.creeper_spores.age_6"
+          },
+          "minecraft:material_instances": {
+            "*": {
+              "ambient_occlusion": false,
+              "face_dimming": true,
+              "render_method": "alpha_test_single_sided",
+              "texture": "cookiedookie:creeper_spores.age_6"
+            }
+          },
+          "minecraft:selection_box": {
+            "origin": [ -5, 0, -5 ],
+            "size": [ 10, 16, 10 ]
+          }
+        }
+      },
+      {
+        "condition": "query.block_state('cookiedookie:age') == 7",
+        "components": {
+          "minecraft:destructible_by_explosion": {
+            "explosion_resistance": 30
+          },
+          "minecraft:destructible_by_mining": {
+            "seconds_to_destroy": 10
+          },
+          "minecraft:destruction_particles": {
+            "texture": "cookiedookie:creeper_spores"
+          },
+          "minecraft:geometry": {
+            "identifier": "geometry.creeper_spores.age_7"
+          },
+          "minecraft:material_instances": {
+            "*": {
+              "ambient_occlusion": false,
+              "face_dimming": true,
+              "render_method": "alpha_test_single_sided",
+              "texture": "cookiedookie:creeper_spores.age_7"
+            }
+          },
+          "minecraft:selection_box": {
+            "origin": [ -6, 0, -6 ],
+            "size": [ 12, 16, 12 ]
+          }
+        }
+      }
+    ],
+    "components": {
+      "cookiedookie:creeper_spores": {
+      },
+      "minecraft:collision_box": false,
+      "minecraft:light_dampening": 0,
+      "minecraft:liquid_detection": {
+        "detection_rules": [
+          {
+            "can_contain_liquid": true,
+            "liquid_type": "water",
+            "on_liquid_touches": "no_reaction",
+            "stops_liquid_flowing_from_direction": []
+          }
+        ]
+      },
+      "minecraft:loot": "loot_tables/empty.json",
+      "minecraft:map_color": {
+        "color": "#4DDB4C"
+      },
+      "minecraft:tick": {
+        "interval_range": [ 300, 2400 ],
+        "looping": true
+      }
+    }
+  }
+}

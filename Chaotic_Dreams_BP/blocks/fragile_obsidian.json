@@ -1,0 +1,76 @@
+{
+    "format_version": "1.21.40",
+    "minecraft:block": {
+        "description": {
+            "identifier": "netherlands:fragile_obsidian"
+        },
+        "components": {
+            "minecraft:destructible_by_mining": {
+                "item_specific_speeds": [
+                    {
+                        "destroy_speed": 0.5,
+                        "item": { "tags": "q.all_tags('minecraft:is_pickaxe', 'minecraft:wooden_tier')" }
+                    },
+                    {
+                        "destroy_speed": 0.75,
+                        "item": { "tags": "q.all_tags('minecraft:is_pickaxe', 'minecraft:stone_tier')" }
+                    },
+                    {
+                        "destroy_speed": 0.5,
+                        "item": { "tags": "q.all_tags('minecraft:is_pickaxe', 'minecraft:iron_tier')" }
+                    },
+                    {
+                        "destroy_speed": 0.2,
+                        "item": { "tags": "q.all_tags('minecraft:is_pickaxe', 'minecraft:diamond_tier')" }
+                    },
+                    {
+                        "destroy_speed": 0.35,
+                        "item": { "tags": "q.all_tags('minecraft:is_pickaxe', 'minecraft:netherite_tier')" }
+                    },
+                    {
+                        "destroy_speed": 0.25,
+                        "item": { "tags": "q.all_tags('minecraft:is_pickaxe', 'minecraft:golden_tier')" }
+                    },
+                    {
+                        "destroy_speed": 0.5,
+                        "item": { "tags": "q.any_tag('minecraft:is_pickaxe')" }
+                    }
+                ],
+                "seconds_to_destroy": 0.5
+            },
+            "minecraft:destructible_by_explosion": false,
+            "minecraft:friction": 0.2,
+             "minecraft:tick": {
+                "interval_range": [ 40, 80 ],
+                "looping": false
+            },
+"minecraft:custom_components":["netherlands:fragile_decay"],
+            "minecraft:map_color": "#0E0209",
+            "minecraft:light_dampening": 0,
+            "minecraft:light_emission": 0,
+            "minecraft:loot": "loot_tables/empty.json",
+            "minecraft:geometry": "minecraft:geometry.full_block",
+            "minecraft:collision_box": true,
+            "minecraft:selection_box": {
+                "origin": [
+                    -8.0,
+                    0.0,
+                    -8.0
+                ],
+                "size": [
+                    16.0,
+                    16.0,
+                    16.0
+                ]
+            },
+            "minecraft:material_instances": {
+                "*": {
+                    "texture": "obsidian",
+                    "render_method": "opaque"
+                }
+            },
+            "tag:stone": {}
+        },
+        "permutations": []
+    }
+}

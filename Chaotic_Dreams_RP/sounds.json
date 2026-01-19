@@ -1,0 +1,26 @@
+{
+	"entity_sounds": {
+		"entities": {
+			"netherlands:wisp": {
+				"events": {
+					"death": "mob.ghast.scream"
+				},
+				"pitch": [
+					0.1,
+					0.1
+				],
+				"volume": 1
+			},
+			"netherlands:portal_atlas": {
+				"events": {
+					"death": "mob.ghast.scream"
+				},
+				"pitch": [
+					0.1,
+					0.1
+				],
+				"volume": 1
+			}
+		}
+	}
+}

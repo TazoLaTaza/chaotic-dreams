@@ -1,0 +1,90 @@
+{
+ "format_version": "1.21.50",
+    "minecraft:entity": {
+   "description": {
+    "identifier": "netherlands:hive_mind",
+    "is_spawnable": false,
+    "is_summonable": true,
+    "is_experimental": false
+  },
+		"component_groups": {
+				"despawn": {
+				"minecraft:instant_despawn": {}
+			}
+		},
+  "components": {
+           "minecraft:collision_box": {
+				"height": 0.1,
+				"width": 0.1
+			},
+            "minecraft:tick_world": {
+				"distance_to_players": 128,
+				"never_despawn": true,
+				"radius": 4
+			},
+    "minecraft:entity_sensor": {
+  "relative_range": false,
+  "subsensors": [
+    {
+      "event": "netherlands:fog_start",
+      "cooldown": 3,
+      "range": [30, 30],
+      "minimum_count": 1,
+      "event_filters": {
+        "all_of": [
+          {
+            "test": "is_family",
+            "subject": "other",
+            "value": "player"
+          }
+        ]
+      }
+    },
+    {
+      "event": "netherlands:fog_stop",
+      "cooldown": 1,
+      "range": [30, 30],
+      "maximum_count": 0,
+      "event_filters": {
+        "all_of": [
+          {
+            "test": "is_family",
+            "subject": "other",
+            "value": "player"
+          }
+        ]
+      }
+    }
+  ]
+},
+			"minecraft:health": {
+				"value": 60
+			},
+			"minecraft:physics": {
+				"has_collision": false,
+				"has_gravity": false
+			},
+			"minecraft:on_death": {
+				"event": "netherlands:death"
+			}
+			  },
+		"events": {
+			"netherlands:death": {
+				"add": {
+					"component_groups": [
+						"despawn"
+					]
+				}
+			},
+			"netherlands:fog_start": {
+"queue_command": {
+	"command": [
+	"particle netherlands:nether_corruption"
+]
+}
+			},
+						"netherlands:fog_stop": {
+			}
+		}
+	}
+}

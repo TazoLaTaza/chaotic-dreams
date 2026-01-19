@@ -1,0 +1,22 @@
+{
+  "format_version": "1.21.60",
+  "minecraft:item": {
+    "description": {
+      "identifier": "cookiedookie:creeper_spores",
+      "menu_category": {
+        "category": "nature"
+      }
+    },
+    "components": {
+      "minecraft:block_placer": { 
+        "block": "cookiedookie:creeper_spores",
+        "replace_block_item": true
+      },
+      "minecraft:icon": {
+        "textures": {
+          "default": "cookiedookie:creeper_spores"
+        }
+      }
+    }
+  }
+}

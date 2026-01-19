@@ -1,0 +1,31 @@
+{
+  "texture_data": {
+    "cookiedookie:creeper_spores": {
+      "textures": "textures/blocks/creeper_spores/creeper_spores"
+    },
+    "cookiedookie:creeper_spores.age_0": {
+      "textures": "textures/blocks/creeper_spores/creeper_spores_age_0"
+    },
+    "cookiedookie:creeper_spores.age_1": {
+      "textures": "textures/blocks/creeper_spores/creeper_spores_age_1"
+    },
+    "cookiedookie:creeper_spores.age_2": {
+      "textures": "textures/blocks/creeper_spores/creeper_spores_age_2"
+    },
+    "cookiedookie:creeper_spores.age_3": {
+      "textures": "textures/blocks/creeper_spores/creeper_spores_age_3"
+    },
+    "cookiedookie:creeper_spores.age_4": {
+      "textures": "textures/blocks/creeper_spores/creeper_spores_age_4"
+    },
+    "cookiedookie:creeper_spores.age_5": {
+      "textures": "textures/blocks/creeper_spores/creeper_spores_age_5"
+    },
+    "cookiedookie:creeper_spores.age_6": {
+      "textures": "textures/blocks/creeper_spores/creeper_spores_age_6"
+    },
+    "cookiedookie:creeper_spores.age_7": {
+      "textures": "textures/blocks/creeper_spores/creeper_spores_age_7"
+    }
+  }
+}

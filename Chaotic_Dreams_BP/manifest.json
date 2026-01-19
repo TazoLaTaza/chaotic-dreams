@@ -1,0 +1,41 @@
+{
+    "format_version": 2,
+    "header": {
+        "description": "Improved Minecraft Mobs by adding player movement and others.",
+        "name": "Enhanced AICraft BP",
+        "uuid": "dc81ac58-f523-4bde-949b-714a2d9d083f",
+        "version": [ 0, 0, 11 ],
+        "min_engine_version": [ 1, 21, 130 ]
+    },
+    "modules": [
+        {
+            "type": "data",
+            "uuid": "aa1a8282-02c0-4b85-96d8-b4b8f92b22ce",
+            "version": [0, 0, 1]
+        },
+        {
+            "type": "script",
+            "language": "javascript",
+            "uuid": "0a9ff10b-f3b6-47fc-b412-826984365121",
+            "version": [0, 0, 1],
+            "entry": "scripts/main.js"
+        }
+    ],
+"dependencies": [
+  {
+    "uuid": "bbad4251-c32d-4eac-8533-f0daf057561e",
+    "version": [0, 0, 11]
+  },
+  {
+            "module_name": "@minecraft/server-ui",
+            "version": "2.0.0"
+  },
+  {
+    "module_name": "@minecraft/server",
+    "version": "beta"
+  }
+],
+      "metadata": {
+    "product_type": "addon"
+  }
+}
