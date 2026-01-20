@@ -298,5 +298,8 @@ if (isLiquid(typeId) && !typeId.includes("water")) return null;
   }
 
   // Default: no change
-  return null;
+  // Fallback: any remaining overworld block that doesn't have a specific nether counterpart
+  // will be converted to blackstone.  This ensures that blocks without explicit mappings
+  // still get transformed rather than remaining untouched.
+  return "minecraft:blackstone";
 }

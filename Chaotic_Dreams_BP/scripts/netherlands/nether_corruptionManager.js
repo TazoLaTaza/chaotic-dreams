@@ -20,15 +20,19 @@ const CFG=Object.freeze({
   wavePortalsPerTick:3,
   // increase conversions per tick to improve spread and make corruption more aggressive
   // dramatically increase conversions per tick to make the corruption much more aggressive
-  conversionsPerTick:24,
+  // increase conversions per tick to spread corruption much faster
+  conversionsPerTick:32,
   // allow more attempts per tick so the queue drains better
-  maxAttemptsPerTick:60,
+  // allow more attempts per tick so the queue drains better
+  maxAttemptsPerTick:80,
   // increase generation rates for more wave seeds
-  genBase:50,
+  // increase generation rates for more wave seeds and larger patches
+  genBase:60,
   genPerRadius:0.25,
-  genCap:180,
+  genCap:200,
   // increase number of cluster seeds generated per wave for more contiguous patches
-  clusterPerWave:4,
+  // increase number of cluster seeds generated per wave for more contiguous patches
+  clusterPerWave:6,
   maxQueue:2600,
   // limit underground conversion to shallow depths to avoid excessive underground spread
   undergroundDepth:1,
@@ -44,12 +48,14 @@ const CFG=Object.freeze({
   probeYieldEvery:32,
   maxRadius:160,
   // increase growth per wave so radius expands steadily and more territory is covered
-  growthPerWave:1.0,
+  // increase growth per wave to expand radius faster
+  growthPerWave:1.2,
   jitter:2.0,
   // enlarge corruption seed radius and seeds per hit for bigger, contiguous patches
   // bump seed parameters to generate larger contiguous infection patches
-  seedRadius:6,
-  seedsPerHit:10,
+  // enlarge corruption seed radius and seeds per hit for bigger contiguous patches
+  seedRadius:8,
+  seedsPerHit:14,
   revertPerTick:700,
   maxTrackedChanges:160000,
   seenCap:120000,
@@ -124,6 +130,10 @@ function convertAllCorrupted(p,d){
   p.changeKeys.length=0;
   p.convertedCount=0;
   setConvTag(p);
+  // Mark this anchor as nonest so that nest/dome construction stops after moss
+  try{
+    p.e?.addTag?.(TAG_NONEST);
+  }catch{}
 }
 
 // Spawn four child corruption anchors at the edges of an existing corruption radius.

@@ -23,15 +23,18 @@ import{world,system}from"@minecraft/server";
  *  - cacheEvery: ticks between portal atlas scans (performance)
  *  - onlyAir: if true, only replaces air/fire blocks when placing shell
  */
+// Configuration for the portal defense system.  The number of operations
+// performed per tick has been reduced so that the nest shell forms much
+// more slowly (approximately three times slower).  Endless dome growth
+// has been disabled via the `endlessGrowth` flag so that the dome does
+// not continue expanding once the final phase has been reached.
 const CFG=Object.freeze({
   tickEvery:3,
-  // increase ops per tick to help domes finish more reliably
-  opsPerTick:34,
-  // radius thresholds (in blocks) to trigger nest/dome construction.  These
-  // values have been reduced so the nest begins when the corruption reaches
-  // 15 blocks, the first dome begins at 25 blocks and the second dome
-  // (endless growth) begins at 50 blocks.  Lower values make the
-  // defensive structures appear sooner.
+  // reduce ops per tick to slow down nest formation (~3x slower)
+  opsPerTick:12,
+  // radius thresholds (in blocks) to trigger nest/dome construction.  The
+  // nest begins when corruption reaches 15 blocks, the first dome at 25
+  // blocks and the endless dome (disabled) would begin at 50 blocks.
   radNest:15,
   radDome1:25,
   radDome2:50,
@@ -43,7 +46,10 @@ const CFG=Object.freeze({
   // time between growth steps for the dome once past radDome2 (very slow growth)
   eggGrowEvery:300,
   cacheEvery:60,
-  onlyAir:true
+  onlyAir:true,
+  // disable endless dome growth.  When false the dome stops growing once
+  // the second threshold is reached.
+  endlessGrowth:false
 });
 const DIM="minecraft:overworld",ANCHOR="netherlands:portal_atlas",TAG_PORTAL="nc_portal",TAG_PID="nc_pid:",TAG_ANGER="nc_anger:",TAG_CONV="nc_conv:",TAG_R="nc_r:",TAG_B0="nc_b0:",TAG_B1="nc_b1:";
 // Tag to mark anchors that should not generate nest/dome defense.
@@ -108,7 +114,8 @@ function tick(){
     if(!b) continue;
     // determine whether dome mode should be active and whether endless growth is enabled
     const domeActive = rad >= CFG.radDome1;
-    const endlessDome = rad >= CFG.radDome2;
+    // endless dome growth only if explicitly enabled via CFG.endlessGrowth
+    const endlessDome = CFG.endlessGrowth && (rad >= CFG.radDome2);
     let st = S.get(pid);
     // initialize state if new
     if(!st){
