@@ -17,9 +17,9 @@ const CFG=Object.freeze({
   // enable debug logging so watchdogs are always active
   debug:true,
   tickInterval:6,
-  wavePortalsPerTick:1,
+  wavePortalsPerTick:3,
   // increase conversions per tick to improve spread
-  conversionsPerTick:6,
+  conversionsPerTick:12,
   // allow more attempts per tick so the queue drains better
   maxAttemptsPerTick:32,
   // increase generation rates for more wave seeds
@@ -43,7 +43,7 @@ const CFG=Object.freeze({
   maxRadius:160,
   // increase growth per wave so radius expands steadily and more territory is covered
   growthPerWave:0.65,
-  jitter:1.0,
+  jitter:2.0,
   // enlarge corruption seed radius and seeds per hit for bigger patches
   seedRadius:4,
   seedsPerHit:6,
