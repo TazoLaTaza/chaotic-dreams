@@ -19,15 +19,16 @@ const CFG=Object.freeze({
   tickInterval:6,
   wavePortalsPerTick:3,
   // increase conversions per tick to improve spread and make corruption more aggressive
-  conversionsPerTick:16,
+  // dramatically increase conversions per tick to make the corruption much more aggressive
+  conversionsPerTick:24,
   // allow more attempts per tick so the queue drains better
-  maxAttemptsPerTick:40,
+  maxAttemptsPerTick:60,
   // increase generation rates for more wave seeds
-  genBase:40,
+  genBase:50,
   genPerRadius:0.25,
-  genCap:120,
+  genCap:180,
   // increase number of cluster seeds generated per wave for more contiguous patches
-  clusterPerWave:3,
+  clusterPerWave:4,
   maxQueue:2600,
   // limit underground conversion to shallow depths to avoid excessive underground spread
   undergroundDepth:1,
@@ -43,11 +44,12 @@ const CFG=Object.freeze({
   probeYieldEvery:32,
   maxRadius:160,
   // increase growth per wave so radius expands steadily and more territory is covered
-  growthPerWave:0.80,
+  growthPerWave:1.0,
   jitter:2.0,
   // enlarge corruption seed radius and seeds per hit for bigger, contiguous patches
-  seedRadius:5,
-  seedsPerHit:8,
+  // bump seed parameters to generate larger contiguous infection patches
+  seedRadius:6,
+  seedsPerHit:10,
   revertPerTick:700,
   maxTrackedChanges:160000,
   seenCap:120000,
@@ -64,6 +66,8 @@ const DIM="minecraft:overworld",PORTAL_ID="minecraft:portal",ANCHOR_ID="netherla
 const TAG_PORTAL="nc_portal",TAG_BIO="nc_bio:",TAG_PID="nc_pid:",TAG_R="nc_r:",TAG_B0="nc_b0:",TAG_B1="nc_b1:";
 // Tag for converted block count
 const TAG_CONV="nc_conv:";
+// Tag to mark anchors that should not generate nest/dome defense (child portals)
+const TAG_NONEST="nc_nonest";
 const N4=[{x:1,z:0},{x:-1,z:0},{x:0,z:1},{x:0,z:-1}],N8=[...N4,{x:1,z:1},{x:1,z:-1},{x:-1,z:1},{x:-1,z:-1}],GOLDEN_ANGLE=2.399963229728653;
 const log=(...a)=>{if(CFG.debug)console.warn("[NetherCorr]",...a)};
 const gb=(d,p)=>{try{return d.getBlock(p)}catch{return}},dim=()=>{try{return world.getDimension(DIM)}catch{return}};
@@ -79,6 +83,12 @@ const REVERTING=new Map();
 const PROBE_Q=[];const PROBE_SEEN=new Set();let PROBE_ACTIVE=false;
 let portalsDirty=true,portalsCache=[];let waveIdx=0;
 const PLAYER_FOG=new Map();
+
+// After a portal has been active for this many ticks (20 ticks/second * 60 seconds/minute * 40 minutes),
+// new corruption anchors will be spawned around its perimeter.  This helps bypass the
+// maximum radius limit by creating additional corruption sources.  These child portals
+// do not generate nests or domes and inherit the biome of the parent.
+const CHILD_SPAWN_TICKS=48000;
 function setRadiusTag(p){const e=p?.e;if(!e)return;const r=((p.radius??0)+0.5)|0;if(p.rt===r)return;p.rt=r;try{for(const t of e.getTags())if(t.startsWith(TAG_R))e.removeTag(t)}catch{}try{e.addTag(TAG_R+r)}catch{}}
 function setBoundsTags(p){const e=p?.e,b=p?.bounds;if(!e||!b)return;const v0=(b.minX|0)+","+(b.minY|0)+","+(b.minZ|0),v1=(b.maxX|0)+","+(b.maxY|0)+","+(b.maxZ|0);try{for(const t of e.getTags())if(t.startsWith(TAG_B0)||t.startsWith(TAG_B1))e.removeTag(t)}catch{}try{e.addTag(TAG_B0+v0);e.addTag(TAG_B1+v1)}catch{}}
 
@@ -114,6 +124,80 @@ function convertAllCorrupted(p,d){
   p.changeKeys.length=0;
   p.convertedCount=0;
   setConvTag(p);
+}
+
+// Spawn four child corruption anchors at the edges of an existing corruption radius.
+// Child portals inherit the biome of the parent and are tagged to disable nest/dome construction.
+// They are created only once per parent when the activeTicks exceed CHILD_SPAWN_TICKS.
+function spawnChildPortals(parent,d,tick){
+  if(!parent||parent.childrenSpawned) return;
+  const r = Math.max(20, parent.radius|0);
+  const offsets = [ [r,0], [-r,0], [0,r], [0,-r] ];
+  for(const [dx,dz] of offsets){
+    const cx = parent.cx + dx;
+    const cz = parent.cz + dz;
+    const cy = parent.cy;
+    // create a unique pid
+    const pid = "c" + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+    // spawn the anchor entity at the new location
+    const e = d.spawnEntity(ANCHOR_ID,{x:cx+0.5,y:cy+0.5,z:cz+0.5});
+    try{
+      e.addTag(TAG_PORTAL);
+      e.addTag(TAG_PID+pid);
+      // mark as child (no nest/dome)
+      e.addTag(TAG_NONEST);
+    }catch{}
+    // initialize new portal object
+    const bio = parent.bio;
+    const bounds = null;
+    const p={
+      pid,
+      dimId:DIM,
+      e,
+      bounds:bounds,
+      cx:cx|0,
+      cy:cy|0,
+      cz:cz|0,
+      bio:bio|0,
+      anger:0,
+      spreadMul:1,
+      mobMul:1,
+      radius:2,
+      step:0,
+      rng:hashU32(pid),
+      changes:new Map(),
+      changeKeys:[],
+      spreadDisabled:false,
+      paused:false,
+      sealed:false,
+      gx:cx|0,
+      gy:cy|0,
+      gz:cz|0,
+      lx:cx|0,
+      ly:cy|0,
+      lz:cz|0,
+      lt:0,
+      rt:-1,
+      convertedCount:0,
+      activeTicks:0,
+      nextAngerSpawnTick:(system.currentTick|0)+1200,
+      chunkLoaders:[],
+      childrenSpawned:false
+    };
+    PORTALS.set(pid,p);
+    portalsDirty=true;
+    setRadiusTag(p);
+    setConvTag(p);
+    // spawn chunk loading entities for the child portal
+    try{
+      const loaders = 4;
+      for(let i=0;i<loaders;i++){
+        const loader = d.spawnEntity("netherlands:chunk_loading",{x:cx+0.5,y:cy+1,z:cz+0.5});
+        p.chunkLoaders.push(loader);
+      }
+    }catch{}
+  }
+  parent.childrenSpawned = true;
 }
 
 // Reposition the chunk loading entities for a portal around its current radius. These loaders
@@ -200,6 +284,9 @@ function upsertPortalAt(d,x,y,z){const bounds=computeBounds(d,x,y,z,24);if(!boun
     nextAngerSpawnTick:(system.currentTick|0)+1200,
     // array of spawned chunk loading entities
     chunkLoaders:[]
+    ,
+    // flag to spawn additional child portals after long activity
+    childrenSpawned:false
   };
   PORTALS.set(pid,p);portalsDirty=true;syncPortalAggro(p);setRadiusTag(p);setBoundsTags(p);
   // initialize conversion tag
@@ -219,7 +306,20 @@ function scanForNewPortals(d){for(const pl of world.getPlayers()){if(pl.dimensio
 function rebuildAnchors(d){let anchors=[];try{anchors=d.getEntities({type:ANCHOR_ID,tags:[TAG_PORTAL]})??[]}catch{}for(const e of anchors){try{const pid=ensurePidTag(e);if(PORTALS.has(pid))continue;const bio=getBioFromEntity(e),loc=e.location,cx=loc.x|0,cy=loc.y|0,cz=loc.z|0;const bounds=computeBounds(d,cx,cy,cz,28);
       initLivesIfMissing(e);armIfMissing(e,system.currentTick|0);
       const p={pid,dimId:DIM,e,bounds:bounds??null,cx:bounds?(bounds.cx|0):cx,cy:bounds?(bounds.cy|0):cy,cz:bounds?(bounds.cz|0):cz,bio:bio|0,anger:0,spreadMul:1,mobMul:1,radius:4,step:0,rng:hashU32(pid),changes:new Map(),changeKeys:[],spreadDisabled:false,paused:false,sealed:false,gx:cx,gy:cy,gz:cz,lx:cx,ly:cy,lz:cz,lt:0,rt:-1};
-      PORTALS.set(pid,p);syncPortalAggro(p);setRadiusTag(p);setBoundsTags(p);
+      PORTALS.set(pid,p);
+      syncPortalAggro(p);
+      setRadiusTag(p);
+      setBoundsTags(p);
+      // When anchors are reconstructed from the loaded world data, the corruption queue is empty.
+      // Seed the queue with several initial positions around the portal so that spreading
+      // resumes immediately on reload. Without this, corruption may appear to stop after
+      // leaving and rejoining the world.
+      const by = bounds ? bounds.minY|0 : cy|0;
+      for(let i=0;i<12;i++){
+        const sx = bounds ? ri(bounds.minX,bounds.maxX) : cx;
+        const sz = bounds ? ri(bounds.minZ,bounds.maxZ) : cz;
+        enqueue(sx,by,sz,bio,pid);
+      }
     }catch{}}
   portalsDirty=true
 }
@@ -229,7 +329,11 @@ function genWave(p){if(p.spreadDisabled||p.paused)return;const qsz=Q.length-qh;i
   let gen=((CFG.genBase+(r*CFG.genPerRadius))*mul)|0,cap=((CFG.genCap)*mul)|0;if(cap>(CFG.genCap*3))cap=CFG.genCap*3;if(gen>cap)gen=cap;
   const ySeed=p.bounds?(p.bounds.minY|0):(p.gy|0);
   for(let i=0;i<gen;i++){
-    const theta=(p.step++*GOLDEN_ANGLE),u=rand01(p),rr=u<0.30?rand01(p)*Math.min(8,r):Math.pow(rand01(p),0.65)*r;
+    const theta=(p.step++*GOLDEN_ANGLE);
+    // choose rr biased towards the center to keep waves contiguous.  Use a power function to
+    // bias random values nearer zero, capped at a small portion of the radius to avoid
+    // random far-off seeds that look like separate islands.
+    const rr = Math.pow(rand01(p),1.5) * Math.min(12, r);
     const jx=(rand01(p)-0.5)*CFG.jitter,jz=(rand01(p)-0.5)*CFG.jitter;
     const x=Math.round(p.cx+Math.cos(theta)*rr+jx),z=Math.round(p.cz+Math.sin(theta)*rr+jz);
     enqueue(x,ySeed,z,mutateBiome(p.bio),p.pid);
@@ -332,7 +436,7 @@ function tick(){if(!CFG.enabled)return;const d=dim();if(!d)return;const t=system
   if((t%CFG.validateEvery)===0){if(PORTALS.size===0)rebuildAnchors(d);validatePortals(d,t)}
   if((t%CFG.fallbackScanEvery)===0)scanForNewPortals(d);
   const arr=portalsArr();
-  // Update chunk loaders and spawn portal anger entities on schedule
+  // Update chunk loaders, spawn portal anger entities on schedule and spawn child portals after long activity
   for(const p of arr){
     // reposition chunk loaders regardless of paused state to keep area loaded
     updateChunkLoaders(p);
@@ -345,7 +449,12 @@ function tick(){if(!CFG.enabled)return;const d=dim();if(!d)return;const t=system
         }catch{}
         p.nextAngerSpawnTick=t+1200;
       }
+      // accumulate active time for this portal
       p.activeTicks=(p.activeTicks||0)+CFG.tickInterval;
+      // spawn child corruption anchors once this portal has been active for the defined duration
+      if(!p.childrenSpawned && p.activeTicks >= CHILD_SPAWN_TICKS){
+        spawnChildPortals(p,d,t);
+      }
     }
   }
   // Gold seal can pause portals (no spread + no lives + no spawns, no purification)

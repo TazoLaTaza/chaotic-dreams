@@ -46,6 +46,8 @@ const CFG=Object.freeze({
   onlyAir:true
 });
 const DIM="minecraft:overworld",ANCHOR="netherlands:portal_atlas",TAG_PORTAL="nc_portal",TAG_PID="nc_pid:",TAG_ANGER="nc_anger:",TAG_CONV="nc_conv:",TAG_R="nc_r:",TAG_B0="nc_b0:",TAG_B1="nc_b1:";
+// Tag to mark anchors that should not generate nest/dome defense.
+const TAG_NONEST="nc_nonest";
 const isAirLike=id=>id==="minecraft:air"||id==="minecraft:cave_air"||id==="minecraft:void_air"||id==="minecraft:fire"||id==="minecraft:soul_fire";
 const hasPrefix=(t,p)=>typeof t==="string"&&t.startsWith(p);
 function getStrTag(e,p){try{for(const t of e.getTags())if(hasPrefix(t,p))return t.slice(p.length)}catch{}}
@@ -84,6 +86,16 @@ function tick(){
     loops++;
     if(!e) continue;
     try{ if(typeof e.isValid === "function" && !e.isValid()) continue; }catch{ continue; }
+    // Skip this portal if it has the nonest tag (no defensive structures on children).
+    try{
+      const tags = e.getTags?.();
+      if(tags && tags.includes(TAG_NONEST)){
+        const pidSkip = getPid(e);
+        S.delete(pidSkip);
+        continue;
+      }
+    }catch{}
+
     const pid = getPid(e);
     // corruption radius read from the nc_r tag (integer)
     const rad = getIntTag(e, TAG_R, 0);
