@@ -100,14 +100,19 @@ export function decorateAfterConversion(d, x, y, z, biome, setBlockFn) {
   const ops = { count: 0 };
   const choice = pickDecorForBiome(biome | 0);
 
-  // Optional "boil water"
+  // Optional "boil water" (actually converts water into lava instead of evaporating).  When
+  // water blocks are adjacent to corruption, we replace them with lava so the
+  // environment becomes more hostile.  We avoid spawning fire above lava.
   if (DECOR.boilWater) {
     for (const o of N8) {
       const b = gb(d, { x: x + o.x, y, z: z + o.z });
       if (b && isWater(b.typeId)) {
-        if (tryPlace(d, x + o.x, y, z + o.z, "minecraft:air", ops, setBlockFn)) {
+        // Replace water with lava
+        if (tryPlace(d, x + o.x, y, z + o.z, "minecraft:lava", ops, setBlockFn)) {
+          // Optionally spawn fire above lava if the base is very hot.  This makes
+          // lava columns more dramatic but remains rare.
           const base = gb(d, { x: x + o.x, y: y - 1, z: z + o.z });
-          if (base && baseLooksHot(base.typeId) && Math.random() < 0.25) {
+          if (base && baseLooksHot(base.typeId) && Math.random() < 0.10) {
             tryPlaceAboveIfAir(d, x + o.x, y - 1, z + o.z, "minecraft:fire", ops, setBlockFn);
           }
         }
@@ -174,7 +179,8 @@ export function cleanupSurfaceRing(d, x, y, z, biome, setBlockFn) {
       if (DECOR.boilWater) {
         const w = gb(d, { x: x + dx, y: y + 1, z: z + dz });
         if (w && isWater(w.typeId)) {
-          tryPlace(d, x + dx, y + 1, z + dz, "minecraft:air", ops, setBlockFn);
+          // Replace water above the surface ring with lava instead of air
+          tryPlace(d, x + dx, y + 1, z + dz, "minecraft:lava", ops, setBlockFn);
         }
       }
     }

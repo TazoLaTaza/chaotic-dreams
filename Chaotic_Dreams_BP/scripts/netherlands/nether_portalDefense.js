@@ -27,10 +27,14 @@ const CFG=Object.freeze({
   tickEvery:3,
   // increase ops per tick to help domes finish more reliably
   opsPerTick:34,
-  // radius thresholds (in blocks) to trigger nest/dome construction
-  radNest:70,
-  radDome1:100,
-  radDome2:200,
+  // radius thresholds (in blocks) to trigger nest/dome construction.  These
+  // values have been reduced so the nest begins when the corruption reaches
+  // 15 blocks, the first dome begins at 25 blocks and the second dome
+  // (endless growth) begins at 50 blocks.  Lower values make the
+  // defensive structures appear sooner.
+  radNest:15,
+  radDome1:25,
+  radDome2:50,
   // appearance
   mixChance:0.45,
   baseId:"minecraft:obsidian",

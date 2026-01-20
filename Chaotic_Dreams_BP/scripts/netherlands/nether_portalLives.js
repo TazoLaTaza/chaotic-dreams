@@ -8,15 +8,19 @@ Tags on portal_atlas:
 - nc_hive set once hive mind spawned
 */
 const LCFG=Object.freeze({
-  enabled:true,
+  // Disable the legacy lives/anger system.  When disabled the portal does not track
+  // lives or anger and will not auto-relight.  Breaking the portal simply
+  // triggers conversion logic in the corruption manager.
+  enabled:false,
+  // maxLives, armDelayTicks and relightDelayTicks are unused when the system is disabled
   maxLives:3,
-  armDelayTicks:400, // 20s grace before lives start
-  relightDelayTicks:300, // 15s wait before trying to relight after losing a life
+  armDelayTicks:400,
+  relightDelayTicks:300,
   spreadMulPerAnger:0.35, // anger -> faster corruption
   mobMulPerAnger:0.30, // anger -> more spawns
   fireId:"minecraft:fire",
   angerEntity:"netherlands:portal_anger",
-  hiveEntity:"netherlands:hive_mind", // spawned when lives hit 0
+  hiveEntity:"netherlands:hive_mind", // unused when lives system is disabled
   lifeMobBurst:true,
   lifeMobs:["minecraft:piglin","minecraft:zombified_piglin","minecraft:hoglin","minecraft:magma_cube","minecraft:wither_skeleton"],
   lifeMobBase:2,
@@ -62,35 +66,15 @@ export function isArmed(e,now){if(!LCFG.enabled||!e)return true;return(now|0)>=g
 export function syncPortalAggro(p){if(!LCFG.enabled||!p?.e)return;const e=p.e;let lives=getIntTag(e,TAG_LIVES,LCFG.maxLives);if(lives<0)lives=0;else if(lives>LCFG.maxLives)lives=LCFG.maxLives;const anger=Math.max(0,Math.min(LCFG.maxLives,(LCFG.maxLives-lives)|0));setIntTag(e,TAG_ANGER,anger);p.anger=anger;p.spreadMul=Math.min(1+anger*LCFG.spreadMulPerAnger,3.5);p.mobMul=Math.min(1+anger*LCFG.mobMulPerAnger,3.5)}
 export function onPortalOk(p){if(!LCFG.enabled||!p?.e)return;const e=p.e;if(hasTag(e,TAG_BROKEN))remTag(e,TAG_BROKEN);syncPortalAggro(p)}
 export function onPortalBroken(d,p){
-  // Handle a portal break: consume a life, spawn anger mobs, and pause until manually relit.
-  if(!LCFG.enabled||!d||!p?.e) return false;
-  const e=p.e, b=p.bounds;
-  const x=b ? (b.cx|0) : (p.cx|0);
-  const z=b ? (b.cz|0) : (p.cz|0);
-  const y=b ? (b.minY|0) : (p.cy|0);
-  const livesNow=getIntTag(e,TAG_LIVES,LCFG.maxLives);
-  // If there are no lives left, nothing further to do (corruption manager will handle mossify)
-  if(livesNow<=0){ syncPortalAggro(p); return true; }
-  // If the portal is already marked as broken, simply sync anger and return whether it has no lives left
-  if(hasTag(e,TAG_BROKEN)){
-    syncPortalAggro(p);
-    return getIntTag(e,TAG_LIVES,LCFG.maxLives)<=0;
-  }
-  // Mark the portal as broken so only one life is consumed per break
-  addTag(e,TAG_BROKEN);
-  let lives=livesNow-1;
-  if(lives<0) lives=0;
-  setIntTag(e,TAG_LIVES,lives);
-  const anger=Math.max(0,Math.min(LCFG.maxLives,(LCFG.maxLives-lives)|0));
-  // Spawn an anger entity to mark the event and spawn burst of mobs
-  try{ d.spawnEntity(LCFG.angerEntity,e.location); }catch{}
-  spawnBurst(d,e.location,anger);
-  // Do not spawn hive minds in this version
-  // If no lives remain, convert obsidian, crying obsidian and blackstone around the portal into moss
-  if(lives<=0) cleanupPortalObsidian(d,e);
-  // No automatic relight: the portal must be manually relit by the player
-  syncPortalAggro(p);
-  return lives<=0;
+  // Handle a portal break.  In this modified version the lives/anger system is
+  // disabled, so breaking a portal does not pause corruption.  We simply
+  // spawn a burst of mobs to mark the event.  Further cleanup and moss
+  // conversion is handled by the corruption manager.
+  if(!d||!p?.e) return false;
+  // pick a reasonable location near the portal bounds for mob spawning
+  const loc = p.e.location;
+  spawnBurst(d, loc, 0);
+  return false;
 }
 
 /**

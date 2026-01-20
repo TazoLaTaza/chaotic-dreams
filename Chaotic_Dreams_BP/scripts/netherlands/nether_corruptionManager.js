@@ -18,22 +18,23 @@ const CFG=Object.freeze({
   debug:true,
   tickInterval:6,
   wavePortalsPerTick:3,
-  // increase conversions per tick to improve spread
-  conversionsPerTick:12,
+  // increase conversions per tick to improve spread and make corruption more aggressive
+  conversionsPerTick:16,
   // allow more attempts per tick so the queue drains better
-  maxAttemptsPerTick:32,
+  maxAttemptsPerTick:40,
   // increase generation rates for more wave seeds
-  genBase:32,
-  genPerRadius:0.20,
-  genCap:96,
-  // increase number of cluster seeds generated per wave
-  clusterPerWave:2,
+  genBase:40,
+  genPerRadius:0.25,
+  genCap:120,
+  // increase number of cluster seeds generated per wave for more contiguous patches
+  clusterPerWave:3,
   maxQueue:2600,
-  undergroundDepth:4,
-  ySearchRadius:10,
-  seekDown:64,
+  // limit underground conversion to shallow depths to avoid excessive underground spread
+  undergroundDepth:1,
+  ySearchRadius:8,
+  seekDown:48,
   seekUp:32,
-  seekUpMax:128,
+  seekUpMax:96,
   recenterOnSolid:true,
   recenterModulo:3,
   fullScanUp:56,
@@ -42,11 +43,11 @@ const CFG=Object.freeze({
   probeYieldEvery:32,
   maxRadius:160,
   // increase growth per wave so radius expands steadily and more territory is covered
-  growthPerWave:0.65,
+  growthPerWave:0.80,
   jitter:2.0,
-  // enlarge corruption seed radius and seeds per hit for bigger patches
-  seedRadius:4,
-  seedsPerHit:6,
+  // enlarge corruption seed radius and seeds per hit for bigger, contiguous patches
+  seedRadius:5,
+  seedsPerHit:8,
   revertPerTick:700,
   maxTrackedChanges:160000,
   seenCap:120000,
@@ -85,6 +86,34 @@ function setBoundsTags(p){const e=p?.e,b=p?.bounds;if(!e||!b)return;const v0=(b.
 function setConvTag(p){const e=p?.e;if(!e)return;const val=(p.convertedCount??0)|0;
   try{for(const t of e.getTags())if(t.startsWith(TAG_CONV))e.removeTag(t)}catch{}
   try{e.addTag(TAG_CONV+val)}catch{}
+}
+
+// Convert all blocks that were corrupted by this portal back into moss or jungle leaves.
+// This runs when the portal frame is broken.  It iterates through the recorded
+// changeKeys, converts each block to moss or leaves and clears the change
+// tracking for the portal.  It also resets the convertedCount back to zero
+// and updates the nc_conv tag.  Owners of the blocks are released so that
+// the corruption can start anew.
+function convertAllCorrupted(p,d){
+  if(!p||!d) return;
+  const keys=p.changeKeys;
+  for(const k of keys){
+    const {x,y,z}=parseKey(k);
+    const b=gb(d,{x,y,z});
+    if(b){
+      const id=b.typeId;
+      // don't convert air, water or lava; only convert if it wasn't already moss/leaves
+      if(id!=="minecraft:moss_block" && id!=="minecraft:jungle_leaves" && id!=="minecraft:air" && id!=="minecraft:cave_air" && id!=="minecraft:void_air"){
+        const to=Math.random()<0.35?"minecraft:jungle_leaves":"minecraft:moss_block";
+        try{b.setType(to);}catch{}
+      }
+    }
+    if(OWNERS.get(k)===p.pid) OWNERS.delete(k);
+  }
+  p.changes.clear();
+  p.changeKeys.length=0;
+  p.convertedCount=0;
+  setConvTag(p);
 }
 
 // Reposition the chunk loading entities for a portal around its current radius. These loaders
@@ -167,8 +196,8 @@ function upsertPortalAt(d,x,y,z){const bounds=computeBounds(d,x,y,z,24);if(!boun
     convertedCount:0,
     // tick counter for how long the portal has been active
     activeTicks:0,
-    // schedule for spawning portal anger entities (600 ticks ~30s)
-    nextAngerSpawnTick:(system.currentTick|0)+600,
+    // schedule for spawning portal anger entities (1200 ticks ~60s)
+    nextAngerSpawnTick:(system.currentTick|0)+1200,
     // array of spawned chunk loading entities
     chunkLoaders:[]
   };
@@ -275,18 +304,17 @@ function validatePortals(d,t){
       exists=volHas(d,new BlockVolume({x:p.cx-2,y:p.cy-2,z:p.cz-2},{x:p.cx+2,y:p.cy+2,z:p.cz+2}),PORTAL_ID);
     }
     if(exists){
-      // Portal exists: if previously paused/broken, unpause and call onPortalOk
+      // Portal exists: if previously paused, unpause and notify portal OK
       if(p.paused){
         p.paused=false;
         onPortalOk(p);
       }
       continue;
     }
-    // No portal blocks: mark as paused and call onPortalBroken (adds broken tag)
-    if(!p.paused){
-      p.paused=true;
-      onPortalBroken(d,p);
-    }
+    // No portal blocks present: convert all corrupted blocks back to moss and leaves
+    // but do NOT pause the portal or mark it broken.  The corruption and defense
+    // will continue to operate, and players can still see the nest/dome form.
+    convertAllCorrupted(p,d);
   }
 }
 const esc=s=>String(s??"").replace(/\\/g,"\\\\").replace(/\"/g,"\\\"");
@@ -310,12 +338,12 @@ function tick(){if(!CFG.enabled)return;const d=dim();if(!d)return;const t=system
     updateChunkLoaders(p);
     // spawn portal_anger every 30 seconds when portal is active
     if(!p.paused){
-      if(!p.nextAngerSpawnTick) p.nextAngerSpawnTick=t+600;
+      if(!p.nextAngerSpawnTick) p.nextAngerSpawnTick=t+1200;
       if(t>=p.nextAngerSpawnTick){
         try{
           d.spawnEntity("netherlands:portal_anger",{x:p.cx+0.5,y:p.cy+0.5,z:p.cz+0.5});
         }catch{}
-        p.nextAngerSpawnTick=t+600;
+        p.nextAngerSpawnTick=t+1200;
       }
       p.activeTicks=(p.activeTicks||0)+CFG.tickInterval;
     }
