@@ -38,7 +38,8 @@ export const DECOR = Object.freeze({
   opsCap: 32,     // hard cap per call, prevents spikes
   boilWater: true,
 
-  fireChance: 0.18,
+  // reduce fireChance to limit excessive fire generation
+  fireChance: 0.05,
   fungusChance: 0.22,
   rootsChance: 0.18,
   sproutsChance: 0.12,

@@ -12,7 +12,8 @@ import"./nether_portalDefense.js";
  conversionsPerTick: base block conversions per tickInterval (plus small anger bonus)
  validateEvery: portal check, fallbackScanEvery: new portals near players
 */
-const CFG=Object.freeze({enabled:true,debug:false,tickInterval:6,wavePortalsPerTick:1,conversionsPerTick:2,maxAttemptsPerTick:24,genBase:18,genPerRadius:0.18,genCap:60,clusterPerWave:1,maxQueue:2600,undergroundDepth:4,ySearchRadius:10,seekDown:64,seekUp:32,seekUpMax:128,recenterOnSolid:true,recenterModulo:3,fullScanUp:56,fullScanDown:96,probeStep:2,probeYieldEvery:32,maxRadius:160,growthPerWave:0.35,jitter:1.0,seedRadius:2,seedsPerHit:4,revertPerTick:700,maxTrackedChanges:160000,seenCap:120000,fallbackScanEvery:80,validateEvery:1,angerConvBonusCap:5});
+// Increased conversion and generation parameters to expand corruption coverage and speed.
+const CFG=Object.freeze({enabled:true,debug:false,tickInterval:6,wavePortalsPerTick:1,conversionsPerTick:4,maxAttemptsPerTick:24,genBase:24,genPerRadius:0.18,genCap:80,clusterPerWave:1,maxQueue:2600,undergroundDepth:4,ySearchRadius:10,seekDown:64,seekUp:32,seekUpMax:128,recenterOnSolid:true,recenterModulo:3,fullScanUp:56,fullScanDown:96,probeStep:2,probeYieldEvery:32,maxRadius:160,growthPerWave:0.55,jitter:1.0,seedRadius:2,seedsPerHit:4,revertPerTick:700,maxTrackedChanges:160000,seenCap:120000,fallbackScanEvery:80,validateEvery:10,angerConvBonusCap:3});
 /* FX: fog only (hell) around portal atlas, expands with p.radius.
  fogBase/fogScale are halved vs old v8.
 */
@@ -64,7 +65,7 @@ function upsertPortalAt(d,x,y,z){const bounds=computeBounds(d,x,y,z,24);if(!boun
   try{e.addTag(TAG_PORTAL);e.addTag(TAG_PID+pid)}catch{}
   initLivesIfMissing(e);armIfMissing(e,system.currentTick|0);
   const bio=pickBiome();setBioOnEntity(e,bio);
-  const p={pid,dimId:DIM,e,bounds,cx:bounds.cx|0,cy:bounds.cy|0,cz:bounds.cz|0,bio:bio|0,anger:0,spreadMul:1,mobMul:1,radius:2,step:0,rng:hashU32(pid),changes:new Map(),changeKeys:[],spreadDisabled:false,paused:false,pauseRelight:false,portalActive:true,sealed:false,gx:bounds.cx|0,gy:bounds.minY|0,gz:bounds.cz|0,lx:bounds.cx|0,ly:bounds.minY|0,lz:bounds.cz|0,lt:0,rt:-1};
+  const p={pid,dimId:DIM,e,bounds,cx:bounds.cx|0,cy:bounds.cy|0,cz:bounds.cz|0,bio:bio|0,anger:0,spreadMul:1,mobMul:1,radius:2,step:0,rng:hashU32(pid),changes:new Map(),changeKeys:[],spreadDisabled:false,paused:false,sealed:false,gx:bounds.cx|0,gy:bounds.minY|0,gz:bounds.cz|0,lx:bounds.cx|0,ly:bounds.minY|0,lz:bounds.cz|0,lt:0,rt:-1};
   PORTALS.set(pid,p);portalsDirty=true;syncPortalAggro(p);setRadiusTag(p);setBoundsTags(p);
   for(let i=0;i<12;i++){const px=ri(bounds.minX,bounds.maxX),pz=ri(bounds.minZ,bounds.maxZ);enqueue(px,bounds.minY|0,pz,bio,pid)}
   log("Portal registered",pid)
@@ -72,7 +73,7 @@ function upsertPortalAt(d,x,y,z){const bounds=computeBounds(d,x,y,z,24);if(!boun
 function scanForNewPortals(d){for(const pl of world.getPlayers()){if(pl.dimension.id!==DIM)continue;const loc=pl.location,cx=loc.x|0,cy=loc.y|0,cz=loc.z|0,r=18;const vol=new BlockVolume({x:cx-r,y:cy-10,z:cz-r},{x:cx+r,y:cy+10,z:cz+r});const p=firstType(d,vol,PORTAL_ID);if(p)upsertPortalAt(d,p.x|0,p.y|0,p.z|0)}}
 function rebuildAnchors(d){let anchors=[];try{anchors=d.getEntities({type:ANCHOR_ID,tags:[TAG_PORTAL]})??[]}catch{}for(const e of anchors){try{const pid=ensurePidTag(e);if(PORTALS.has(pid))continue;const bio=getBioFromEntity(e),loc=e.location,cx=loc.x|0,cy=loc.y|0,cz=loc.z|0;const bounds=computeBounds(d,cx,cy,cz,28);
       initLivesIfMissing(e);armIfMissing(e,system.currentTick|0);
-      const p={pid,dimId:DIM,e,bounds:bounds??null,cx:bounds?(bounds.cx|0):cx,cy:bounds?(bounds.cy|0):cy,cz:bounds?(bounds.cz|0):cz,bio:bio|0,anger:0,spreadMul:1,mobMul:1,radius:4,step:0,rng:hashU32(pid),changes:new Map(),changeKeys:[],spreadDisabled:false,paused:false,pauseRelight:false,portalActive:true,sealed:false,gx:cx,gy:cy,gz:cz,lx:cx,ly:cy,lz:cz,lt:0,rt:-1};
+      const p={pid,dimId:DIM,e,bounds:bounds??null,cx:bounds?(bounds.cx|0):cx,cy:bounds?(bounds.cy|0):cy,cz:bounds?(bounds.cz|0):cz,bio:bio|0,anger:0,spreadMul:1,mobMul:1,radius:4,step:0,rng:hashU32(pid),changes:new Map(),changeKeys:[],spreadDisabled:false,paused:false,sealed:false,gx:cx,gy:cy,gz:cz,lx:cx,ly:cy,lz:cz,lt:0,rt:-1};
       PORTALS.set(pid,p);syncPortalAggro(p);setRadiusTag(p);setBoundsTags(p);
     }catch{}}
   portalsDirty=true
@@ -88,8 +89,7 @@ function genWave(p){if(p.spreadDisabled||p.paused)return;const qsz=Q.length-qh;i
     const x=Math.round(p.cx+Math.cos(theta)*rr+jx),z=Math.round(p.cz+Math.sin(theta)*rr+jz);
     enqueue(x,ySeed,z,mutateBiome(p.bio),p.pid);
   }
-  const a=p.anger|0;const grow=CFG.growthPerWave*Math.min(1+0.35*a,2.4);
-  p.radius=Math.min(CFG.maxRadius,p.radius+grow);setRadiusTag(p)
+  p.radius=Math.min(CFG.maxRadius,p.radius+CFG.growthPerWave);setRadiusTag(p)
 }
 function sideExposed(d,x,y,z){for(const o of N4){const b=gb(d,{x:x+o.x,y,z:z+o.z});if(b&&isExposure(b.typeId))return true}return false}
 function trySurfaceSnap(d,x,y0,z){const b0=gb(d,{x,y:y0,z});if(!b0)return;
@@ -141,14 +141,13 @@ function mossifyTick(d){for(const[pid,r]of REVERTING){let n=0;while(r.idx<r.keys
       if(r.idx>=r.keys.length)REVERTING.delete(pid);
       if(n>=CFG.revertPerTick)break;
   }}
-function validatePortals(d,t){for(const[pId,p]of PORTALS){if(p.sealed)continue;try{if(!p.e||typeof p.e.isValid==="function"&&!p.e.isValid())continue}catch{continue}
+function validatePortals(d,t){for(const[pId,p]of PORTALS){if(p.paused)continue;try{if(!p.e||typeof p.e.isValid==="function"&&!p.e.isValid())continue}catch{continue}
     let ok=false;const b=p.bounds;
     if(b){ok=volHas(d,new BlockVolume({x:b.minX,y:b.minY,z:b.minZ},{x:b.maxX,y:b.maxY,z:b.maxZ}),PORTAL_ID)}
     else{ok=volHas(d,new BlockVolume({x:p.cx-2,y:p.cy-2,z:p.cz-2},{x:p.cx+2,y:p.cy+2,z:p.cz+2}),PORTAL_ID)}
-    p.portalActive=ok;
-    if(ok){p.pauseRelight=false;p.paused=p.sealed||p.pauseRelight;onPortalOk(p);continue}
+    if(ok){onPortalOk(p);continue}
     if(!isArmed(p.e,t)){startMossify(pId);continue}
-    if(onPortalBroken(d,p))startMossify(pId);else{p.pauseRelight=true;p.paused=p.sealed||p.pauseRelight}
+    if(onPortalBroken(d,p))startMossify(pId);
   }}
 const esc=s=>String(s??"").replace(/\\/g,"\\\\").replace(/\"/g,"\\\"");
 function fogTick(d){if(!FX.fog)return;let players;try{players=world.getPlayers()}catch{return}if(!players?.length)return;

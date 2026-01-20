@@ -2,7 +2,7 @@
     "format_version": 2,
     "header": {
         "description": "Improved Minecraft Mobs by adding player movement and others.",
-        "name": "Enhanced AICraft BP",
+        "name": "Chaotic Dreams BP",
         "uuid": "dc81ac58-f523-4bde-949b-714a2d9d083f",
         "version": [ 0, 0, 11 ],
         "min_engine_version": [ 1, 21, 130 ]
