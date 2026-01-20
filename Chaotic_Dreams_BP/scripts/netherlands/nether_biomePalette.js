@@ -243,11 +243,9 @@ export function getConversionTarget(typeId, biome, surface) {
 
   // Treat any vanilla nether-themed block as immune (covers Bedrock nether blocks)
   if (isNetherBlock(typeId)) return null;
-// allow water -> lava conversion
-if (typeId === "minecraft:water") return "minecraft:lava";
-if (typeId === "minecraft:flowing_water") return "minecraft:flowing_lava";
-// keep other liquids (lava) untouched
-if (isLiquid(typeId) && !typeId.includes("water")) return null;
+
+  // Don't mess with liquids directly (decorators handle "boil water" if you want)
+  if (isLiquid(typeId)) return null;
 
   const b = biome | 0;
 

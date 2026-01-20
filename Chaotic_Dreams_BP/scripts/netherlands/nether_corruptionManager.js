@@ -17,39 +17,43 @@ const CFG=Object.freeze({
   // enable debug logging so watchdogs are always active
   debug:true,
   tickInterval:6,
-  wavePortalsPerTick:3,
+  wavePortalsPerTick:2,
   // increase conversions per tick to improve spread
-  conversionsPerTick:12,
+  // boost conversions per tick for faster spread
+  conversionsPerTick:14,
   // allow more attempts per tick so the queue drains better
-  maxAttemptsPerTick:32,
+  maxAttemptsPerTick:132,
   // increase generation rates for more wave seeds
   genBase:32,
-  genPerRadius:0.20,
+  genPerRadius:1,
   genCap:96,
   // increase number of cluster seeds generated per wave
-  clusterPerWave:2,
+  // generate more cluster seeds per wave for bigger patches
+  clusterPerWave:3,
   maxQueue:2600,
-  undergroundDepth:4,
+  // limit underground conversion to mostly surface with a small amount of underground
+  undergroundDepth:1,
   ySearchRadius:10,
-  seekDown:64,
+  seekDown:32,
   seekUp:32,
   seekUpMax:128,
   recenterOnSolid:true,
   recenterModulo:3,
   fullScanUp:56,
   fullScanDown:96,
-  probeStep:2,
+  probeStep:3,
   probeYieldEvery:32,
-  maxRadius:160,
+  maxRadius:1299,
   // increase growth per wave so radius expands steadily and more territory is covered
-  growthPerWave:0.65,
-  jitter:2.0,
+  growthPerWave:14,
+  jitter:0.2,
   // enlarge corruption seed radius and seeds per hit for bigger patches
-  seedRadius:4,
-  seedsPerHit:6,
+  // enlarge corruption patch generation
+  seedRadius:15,
+  seedsPerHit:80,
   revertPerTick:700,
-  maxTrackedChanges:160000,
-  seenCap:120000,
+  maxTrackedChanges:16000,
+  seenCap:12000,
   fallbackScanEvery:80,
   validateEvery:10,
   // disable anger bonus since lives/anger system is removed
@@ -165,10 +169,10 @@ function upsertPortalAt(d,x,y,z){const bounds=computeBounds(d,x,y,z,24);if(!boun
     rt:-1,
     // track total converted blocks
     convertedCount:0,
-    // tick counter for how long the portal has been active
-    activeTicks:0,
-    // schedule for spawning portal anger entities (600 ticks ~30s)
-    nextAngerSpawnTick:(system.currentTick|0)+600,
+      // tick counter for how long the portal has been active
+      activeTicks:0,
+      // schedule for spawning portal anger entities (1200 ticks ~60s)
+      nextAngerSpawnTick:(system.currentTick|0)+1200,
     // array of spawned chunk loading entities
     chunkLoaders:[]
   };
@@ -308,17 +312,21 @@ function tick(){if(!CFG.enabled)return;const d=dim();if(!d)return;const t=system
   for(const p of arr){
     // reposition chunk loaders regardless of paused state to keep area loaded
     updateChunkLoaders(p);
-    // spawn portal_anger every 30 seconds when portal is active
-    if(!p.paused){
-      if(!p.nextAngerSpawnTick) p.nextAngerSpawnTick=t+600;
-      if(t>=p.nextAngerSpawnTick){
-        try{
-          d.spawnEntity("netherlands:portal_anger",{x:p.cx+0.5,y:p.cy+0.5,z:p.cz+0.5});
-        }catch{}
-        p.nextAngerSpawnTick=t+600;
+    // spawn portal_anger every 60 seconds when portal is active
+      if(!p.paused){
+        // initialize next anger spawn tick if missing
+        if(!p.nextAngerSpawnTick) p.nextAngerSpawnTick=t+1200;
+        // spawn portal anger entity when schedule is reached
+        if(t>=p.nextAngerSpawnTick){
+          try{
+            d.spawnEntity("netherlands:portal_anger",{x:p.cx+0.5,y:p.cy+0.5,z:p.cz+0.5});
+          }catch{}
+          // schedule next spawn after 1200 ticks (~60s)
+          p.nextAngerSpawnTick=t+1200;
+        }
+        // increment active tick counter
+        p.activeTicks=(p.activeTicks||0)+CFG.tickInterval;
       }
-      p.activeTicks=(p.activeTicks||0)+CFG.tickInterval;
-    }
   }
   // Gold seal can pause portals (no spread + no lives + no spawns, no purification)
   for(const p of arr)updateGoldSeal(d,p,t);

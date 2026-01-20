@@ -7,24 +7,27 @@ Tags on portal_atlas:
 - nc_broken set after consuming a life for the current break (cleared when portal returns)
 - nc_hive set once hive mind spawned
 */
+/* Life system disabled. Instead of tracking lives/anger, the portal simply pauses when broken.
+   We keep some constants for backward compatibility but they are unused. */
 const LCFG=Object.freeze({
-  enabled:true,
-  maxLives:3,
-  armDelayTicks:400, // 20s grace before lives start
-  relightDelayTicks:300, // 15s wait before trying to relight after losing a life
-  spreadMulPerAnger:0.35, // anger -> faster corruption
-  mobMulPerAnger:0.30, // anger -> more spawns
+  enabled:false,
+  // values below are unused when enabled is false
+  maxLives:0,
+  armDelayTicks:0,
+  relightDelayTicks:0,
+  spreadMulPerAnger:0,
+  mobMulPerAnger:0,
   fireId:"minecraft:fire",
   angerEntity:"netherlands:portal_anger",
-  hiveEntity:"netherlands:hive_mind", // spawned when lives hit 0
+  hiveEntity:"netherlands:hive_mind",
   lifeMobBurst:true,
   lifeMobs:["minecraft:piglin","minecraft:zombified_piglin","minecraft:hoglin","minecraft:magma_cube","minecraft:wither_skeleton"],
-  lifeMobBase:2,
-  lifeMobPerAnger:1,
-  lifeMobCap:6,
-  lifeMobRange:4
+  lifeMobBase:0,
+  lifeMobPerAnger:0,
+  lifeMobCap:0,
+  lifeMobRange:0
 });
-const TAG_LIVES="nc_lives:",TAG_ANGER="nc_anger:",TAG_ARM="nc_arm:",TAG_BROKEN="nc_broken",TAG_HIVE="nc_hive";
+const TAG_LIVES="nc_lives:",TAG_ANGER="nc_anger:",TAG_ARM="nc_arm:",TAG_REL="nc_relite:",TAG_BROKEN="nc_broken",TAG_HIVE="nc_hive";
 const isAir=id=>id==="minecraft:air"||id==="minecraft:cave_air"||id==="minecraft:void_air";
 const hasPrefix=(t,p)=>typeof t==="string"&&t.startsWith(p);
 function getIntTag(e,prefix,def){try{for(const t of e.getTags())if(hasPrefix(t,prefix))return(parseInt(t.slice(prefix.length),10)|0)}catch{}return def|0}
@@ -32,23 +35,8 @@ function setIntTag(e,prefix,val){try{for(const t of e.getTags())if(hasPrefix(t,p
 function hasTag(e,t){try{return e.getTags().includes(t)}catch{return false}}
 function addTag(e,t){try{e.addTag(t)}catch{}}
 function remTag(e,t){try{e.removeTag(t)}catch{}}
-// ignition removed: portal must be manually relit by players
+// igniteAt is unused once lives are disabled. Keep as no-op for compatibility.
 function igniteAt(d,x,y,z){return false}
-
-/**
- * Determine if a portal atlas is in its relight pause state.
- * A portal enters a paused state after losing a life; during this time all
- * corruption, defense and tendril logic should halt until the player manually relights
- * the portal. We mark this state via the nc_broken tag. When the portal is
- * relit, onPortalOk clears this tag.
- *
- * @param {Entity} e The portal_atlas entity to check
- * @param {number} now The current game tick (unused)
- * @returns {boolean} true if the portal is currently paused (broken)
- */
-export function isRelightPaused(e,now){
-  return hasTag(e,TAG_BROKEN);
-}
 function rnd(){return(Math.random()*2-1)}
 function spawnBurst(d,loc,anger){if(!LCFG.lifeMobBurst||!d||!loc)return;const n=Math.min(LCFG.lifeMobCap,LCFG.lifeMobBase+(anger|0)*LCFG.lifeMobPerAnger)|0;for(let i=0;i<n;i++){
     const id=LCFG.lifeMobs[(Math.random()*LCFG.lifeMobs.length)|0];
@@ -56,85 +44,94 @@ function spawnBurst(d,loc,anger){if(!LCFG.lifeMobBurst||!d||!loc)return;const n=
     try{d.spawnEntity(id,{x,y,z})}catch{}
   }
 }
-export function initLivesIfMissing(e){if(!LCFG.enabled||!e)return;if(getIntTag(e,TAG_LIVES,-1)<0)setIntTag(e,TAG_LIVES,LCFG.maxLives);if(getIntTag(e,TAG_ANGER,-1)<0)setIntTag(e,TAG_ANGER,0)}
-export function armIfMissing(e,now){if(!LCFG.enabled||!e)return;const v=getIntTag(e,TAG_ARM,-1);if(v<0)setIntTag(e,TAG_ARM,(now|0)+LCFG.armDelayTicks)}
-export function isArmed(e,now){if(!LCFG.enabled||!e)return true;return(now|0)>=getIntTag(e,TAG_ARM,0)}
-export function syncPortalAggro(p){if(!LCFG.enabled||!p?.e)return;const e=p.e;let lives=getIntTag(e,TAG_LIVES,LCFG.maxLives);if(lives<0)lives=0;else if(lives>LCFG.maxLives)lives=LCFG.maxLives;const anger=Math.max(0,Math.min(LCFG.maxLives,(LCFG.maxLives-lives)|0));setIntTag(e,TAG_ANGER,anger);p.anger=anger;p.spreadMul=Math.min(1+anger*LCFG.spreadMulPerAnger,3.5);p.mobMul=Math.min(1+anger*LCFG.mobMulPerAnger,3.5)}
-export function onPortalOk(p){if(!LCFG.enabled||!p?.e)return;const e=p.e;if(hasTag(e,TAG_BROKEN))remTag(e,TAG_BROKEN);syncPortalAggro(p)}
+export function initLivesIfMissing(e){
+  // Lives system disabled: no initialization needed
+}
+export function armIfMissing(e,now){
+  // Lives system disabled: portal is always armed
+}
+export function isArmed(e,now){
+  // Always armed since lives system is disabled
+  return true;
+}
+export function syncPortalAggro(p){
+  // When lives are disabled, set anger=0 and normalize spread/mob multipliers
+  if(!p||!p.e)return;
+  p.anger=0;
+  p.spreadMul=1;
+  p.mobMul=1;
+  const e=p.e;
+  // remove existing nc_anger tags and set to 0 for compatibility
+  try{
+    for(const t of e.getTags()){
+      if(t && t.startsWith(TAG_ANGER)) e.removeTag(t);
+    }
+    e.addTag(TAG_ANGER+"0");
+  }catch{}
+}
+export function onPortalOk(p){
+  // clear broken tag and reset aggression
+  if(!p||!p.e)return;
+  const e=p.e;
+  if(hasTag(e,TAG_BROKEN)) remTag(e,TAG_BROKEN);
+  syncPortalAggro(p);
+}
 export function onPortalBroken(d,p){
-  // Handle a portal break: consume a life, spawn anger mobs, and pause until manually relit.
-  if(!LCFG.enabled||!d||!p?.e) return false;
-  const e=p.e, b=p.bounds;
-  const x=b ? (b.cx|0) : (p.cx|0);
-  const z=b ? (b.cz|0) : (p.cz|0);
-  const y=b ? (b.minY|0) : (p.cy|0);
-  const livesNow=getIntTag(e,TAG_LIVES,LCFG.maxLives);
-  // If there are no lives left, nothing further to do (corruption manager will handle mossify)
-  if(livesNow<=0){ syncPortalAggro(p); return true; }
-  // If the portal is already marked as broken, simply sync anger and return whether it has no lives left
+  // When portal breaks, mark as broken but do not consume lives.
+  if(!p||!p.e)return false;
+  const e=p.e;
+  // If already marked broken, nothing changes
   if(hasTag(e,TAG_BROKEN)){
     syncPortalAggro(p);
-    return getIntTag(e,TAG_LIVES,LCFG.maxLives)<=0;
+    return false;
   }
-  // Mark the portal as broken so only one life is consumed per break
+  // Mark as broken so corruption pauses
   addTag(e,TAG_BROKEN);
-  let lives=livesNow-1;
-  if(lives<0) lives=0;
-  setIntTag(e,TAG_LIVES,lives);
-  const anger=Math.max(0,Math.min(LCFG.maxLives,(LCFG.maxLives-lives)|0));
-  // Spawn an anger entity to mark the event and spawn burst of mobs
-  try{ d.spawnEntity(LCFG.angerEntity,e.location); }catch{}
-  spawnBurst(d,e.location,anger);
-  // Do not spawn hive minds in this version
-  // If no lives remain, convert obsidian, crying obsidian and blackstone around the portal into moss
-  if(lives<=0) cleanupPortalObsidian(d,e);
-  // No automatic relight: the portal must be manually relit by the player
+  // Use safe coordinates for spawning burst and cleanup: derive from portal bounds or stored center
+  const b=p.bounds;
+  const cx=b ? (b.cx|0) : (p.cx|0);
+  const cy=b ? (b.minY|0) : (p.cy|0);
+  const cz=b ? (b.cz|0) : (p.cz|0);
+  // Spawn a burst of mobs for flavor at the portal center
+  try{
+    spawnBurst(d,{x:cx+0.5,y:cy+0.5,z:cz+0.5},1);
+  }catch{}
+  // Convert nether blocks (netherrack, basalt, blackstone, obsidian) around portal to moss
+  try{
+    cleanupPortalNetherBlocks(d,p);
+  }catch{}
   syncPortalAggro(p);
-  return lives<=0;
+  return false;
 }
 
 /**
- * Convert obsidian, crying obsidian and blackstone within the portal's bounds into moss blocks.
- * This runs when a portal loses its final life. We locate the portal's bounding box
- * from the stored tags (nc_b0 and nc_b1) on the atlas, then expand it slightly and
- * iterate through the volume. Any obsidian, crying obsidian or blackstone blocks
- * are replaced with moss_block. This cleanup helps illustrate the corruption receding.
+ * Convert certain Nether blocks around the portal into moss blocks when the portal breaks.
+ * This includes obsidian, crying obsidian, blackstone, basalt and netherrack within the
+ * portal bounds (expanded slightly). This helps illustrate the corruption receding when
+ * the portal is broken. Safe coordinates are derived from the portal's bounds or fallback
+ * to a small box around its stored center.
  *
- * @param {Dimension} d The dimension in which the portal resides
- * @param {Entity} e The portal_atlas entity
+ * @param {Dimension} d
+ * @param {Object} p Portal state containing bounds, cx, cy, cz
  */
-function cleanupPortalObsidian(d,e){
-  if(!e||!d)return;
-  // Extract bounds from tags if present
-  let min=null,max=null;
-  try{
-    for(const t of e.getTags()){
-      if(typeof t!=="string")continue;
-      if(t.startsWith("nc_b0:"))min=t.slice(6);
-      else if(t.startsWith("nc_b1:"))max=t.slice(6);
-    }
-  }catch{}
+function cleanupPortalNetherBlocks(d,p){
+  if(!p||!d)return;
+  const e=p.e;
   let minX,minY,minZ,maxX,maxY,maxZ;
-  if(min&&max){
-    const p0=min.split(","),p1=max.split(",");
-    if(p0.length>=3&&p1.length>=3){
-      minX=p0[0]|0;minY=p0[1]|0;minZ=p0[2]|0;
-      maxX=p1[0]|0;maxY=p1[1]|0;maxZ=p1[2]|0;
-    }
-  }
-  // Fallback: derive a small box around the atlas if bounds missing
-  if(minX==null){
-    const loc=e.location;
-    minX=(loc.x|0)-4;maxX=(loc.x|0)+4;
-    minY=(loc.y|0)-4;maxY=(loc.y|0)+4;
-    minZ=(loc.z|0)-4;maxZ=(loc.z|0)+4;
-  }else{
-    // Expand bounds slightly to cover supporting blocks
+  if(p.bounds){
+    const b=p.bounds;
+    minX=b.minX|0;minY=b.minY|0;minZ=b.minZ|0;
+    maxX=b.maxX|0;maxY=b.maxY|0;maxZ=b.maxZ|0;
+    // Expand bounds slightly
     minX-=4;maxX+=4;
     minY-=2;maxY+=2;
     minZ-=4;maxZ+=4;
+  }else{
+    const cx=p.cx|0,cy=p.cy|0,cz=p.cz|0;
+    minX=cx-4;maxX=cx+4;
+    minY=cy-4;maxY=cy+4;
+    minZ=cz-4;maxZ=cz+4;
   }
-  // Iterate through the volume and convert target blocks to moss
   for(let x=minX;x<=maxX;x++){
     for(let y=minY;y<=maxY;y++){
       for(let z=minZ;z<=maxZ;z++){
@@ -142,13 +139,26 @@ function cleanupPortalObsidian(d,e){
         try{b=d.getBlock({x,y,z});}catch{continue;}
         if(!b)continue;
         const id=b.typeId;
-        if(id==="minecraft:obsidian"||id==="minecraft:crying_obsidian"||id==="minecraft:blackstone"){
+        if(id==="minecraft:obsidian"||id==="minecraft:crying_obsidian"||
+           id==="minecraft:blackstone"||id==="minecraft:polished_blackstone"||
+           id==="minecraft:basalt"||id==="minecraft:polished_basalt"||
+           id==="minecraft:netherrack"){
           try{b.setType("minecraft:moss_block");}catch{}
         }
       }
     }
   }
 }
-export function getLives(e){return getIntTag(e,TAG_LIVES,LCFG.maxLives)}
-export function getAnger(e){return getIntTag(e,TAG_ANGER,0)}
+export function isRelightPaused(e,t){
+  // A portal is considered in the relight pause if it's marked as broken
+  return hasTag(e,TAG_BROKEN);
+}
+export function getLives(e){
+  // Lives system disabled
+  return 0;
+}
+export function getAnger(e){
+  // Always anger 0
+  return 0;
+}
 export const LivesConfig=LCFG;

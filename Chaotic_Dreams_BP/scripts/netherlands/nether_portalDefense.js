@@ -25,19 +25,19 @@ import{world,system}from"@minecraft/server";
  */
 const CFG=Object.freeze({
   tickEvery:3,
-  // increase ops per tick to help domes finish more reliably
-  opsPerTick:34,
-  // radius thresholds (in blocks) to trigger nest/dome construction
-  radNest:70,
-  radDome1:100,
-  radDome2:200,
+  // reduce ops per tick so nests and domes grow very slowly
+  opsPerTick:20,
+  // radius thresholds (in blocks) to trigger nest/dome construction (smaller values for quicker triggers)
+  radNest:15,
+  radDome1:25,
+  radDome2:50,
   // appearance
   mixChance:0.45,
   baseId:"minecraft:obsidian",
   mixId:"minecraft:crying_obsidian",
   stoneId:"minecraft:blackstone",
   // time between growth steps for the dome once past radDome2 (very slow growth)
-  eggGrowEvery:300,
+  eggGrowEvery:600,
   cacheEvery:60,
   onlyAir:true
 });
