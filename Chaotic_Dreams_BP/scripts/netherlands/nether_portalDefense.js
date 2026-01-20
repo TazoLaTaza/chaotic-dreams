@@ -11,7 +11,7 @@ import { isRelightPaused } from "./nether_portalLives.js";
 const CFG = Object.freeze({
   enabled: true,
   tickEvery: 2,
-  opsPerTick: 34,
+  opsPerTick: 40,
   nestStartAnger: 2,
   domeStartAnger: 2,
   mixChance: 0.45,
@@ -26,10 +26,10 @@ const CFG = Object.freeze({
   domeDelay: 120,
   domePad: 6,
   domeMinR: 18,
-  domeOpsBase: 10,
-  domeOpsAnger: 6,
-  dome1Ticks: 260,
-  dome2Ticks: 340,
+  domeOpsBase: 15,
+  domeOpsAnger: 8,
+  dome1Ticks: 400,
+  dome2Ticks: 500,
   dome2Mul: 1.35,
   dome2Add: 14
 });
@@ -151,7 +151,7 @@ function tick(){
     // build domes if anger>=domeStartAnger after delay
     if(anger>=CFG.domeStartAnger && t - st.start >= CFG.domeDelay){
       // initialize stage and radius if first time
-      if(st.dStage===0){st.dStage=1;st.d0=t;st.domeR=domeTargetR(e,b);}
+      if(st.dStage===0){st.dStage=1;st.d0=t;st.domeR=domeTargetR(e,b);} 
       // if first dome complete, transition to second
       if(st.dStage===1 && t - st.d0 >= CFG.dome1Ticks){st.dStage=2;st.d0=t;const baseR=domeTargetR(e,b);st.domeR=Math.max((baseR*CFG.dome2Mul)|0,baseR+CFG.dome2Add);} 
       // if second dome complete, mark done

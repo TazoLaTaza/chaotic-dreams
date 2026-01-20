@@ -3,7 +3,7 @@ import{pickBiome,mutateBiome,getConversionTarget}from"./nether_biomePalette.js";
 import{decorateAfterConversion,cleanupSurfaceRing}from"./nether_decorators.js";
 import{tickCorruptionSpawns,recordSpreadPoint}from"./nether_mobGen.js";
 import{colGet,colSet}from"./nether_cache.js";
-import{initLivesIfMissing,onPortalOk,onPortalBroken,syncPortalAggro,armIfMissing,isArmed}from"./nether_portalLives.js";
+import{initLivesIfMissing,onPortalOk,onPortalBroken,syncPortalAggro,armIfMissing,isArmed,isRelightPaused}from"./nether_portalLives.js";
 import{updateGoldSeal}from"./nether_goldSeal.js";
 import"./nether_hive_mind.js";
 import"./nether_portalDefense.js";
@@ -12,8 +12,7 @@ import"./nether_portalDefense.js";
  conversionsPerTick: base block conversions per tickInterval (plus small anger bonus)
  validateEvery: portal check, fallbackScanEvery: new portals near players
 */
-// Increased conversion and generation parameters to expand corruption coverage and speed.
-const CFG=Object.freeze({enabled:true,debug:false,tickInterval:6,wavePortalsPerTick:1,conversionsPerTick:4,maxAttemptsPerTick:24,genBase:24,genPerRadius:0.18,genCap:80,clusterPerWave:1,maxQueue:2600,undergroundDepth:4,ySearchRadius:10,seekDown:64,seekUp:32,seekUpMax:128,recenterOnSolid:true,recenterModulo:3,fullScanUp:56,fullScanDown:96,probeStep:2,probeYieldEvery:32,maxRadius:160,growthPerWave:0.55,jitter:1.0,seedRadius:2,seedsPerHit:4,revertPerTick:700,maxTrackedChanges:160000,seenCap:120000,fallbackScanEvery:80,validateEvery:10,angerConvBonusCap:3});
+const CFG=Object.freeze({enabled:true,debug:false,tickInterval:6,wavePortalsPerTick:1,conversionsPerTick:4,maxAttemptsPerTick:24,genBase:24,genPerRadius:0.22,genCap:80,clusterPerWave:1,maxQueue:2600,undergroundDepth:4,ySearchRadius:10,seekDown:64,seekUp:32,seekUpMax:128,recenterOnSolid:true,recenterModulo:3,fullScanUp:56,fullScanDown:96,probeStep:2,probeYieldEvery:32,maxRadius:160,growthPerWave:0.55,jitter:1.0,seedRadius:2,seedsPerHit:4,revertPerTick:700,maxTrackedChanges:160000,seenCap:120000,fallbackScanEvery:80,validateEvery:10,angerConvBonusCap:3});
 /* FX: fog only (hell) around portal atlas, expands with p.radius.
  fogBase/fogScale are halved vs old v8.
 */
@@ -166,6 +165,16 @@ function tick(){if(!CFG.enabled)return;const d=dim();if(!d)return;const t=system
   const arr=portalsArr();
   // Gold seal can pause portals (no spread + no lives + no spawns, no purification)
   for(const p of arr)updateGoldSeal(d,p,t);
+  // Pause corruption when the portal is broken and waiting for manual relight
+  for(const p of arr){
+    if(p.spreadDisabled) continue;
+    try{
+      if(isRelightPaused(p.e,t)) p.paused = true;
+      else p.paused = false;
+    }catch{
+      // if check fails, leave paused as-is
+    }
+  }
   let maxA=0;const active=[];for(const p of arr){if(p.spreadDisabled||p.paused)continue;active.push(p);const a=p.anger|0;if(a>maxA)maxA=a}
   if(active.length){for(let i=0;i<CFG.wavePortalsPerTick;i++){const p=active[(waveIdx++%active.length)];genWave(p)}}
   doConversion(d,t,CFG.conversionsPerTick+Math.min(CFG.angerConvBonusCap,maxA));
