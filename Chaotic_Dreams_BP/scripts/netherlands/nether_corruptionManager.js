@@ -12,13 +12,57 @@ import"./nether_portalDefense.js";
  conversionsPerTick: base block conversions per tickInterval (plus small anger bonus)
  validateEvery: portal check, fallbackScanEvery: new portals near players
 */
-const CFG=Object.freeze({enabled:true,debug:false,tickInterval:6,wavePortalsPerTick:1,conversionsPerTick:4,maxAttemptsPerTick:24,genBase:24,genPerRadius:0.22,genCap:80,clusterPerWave:1,maxQueue:2600,undergroundDepth:4,ySearchRadius:10,seekDown:64,seekUp:32,seekUpMax:128,recenterOnSolid:true,recenterModulo:3,fullScanUp:56,fullScanDown:96,probeStep:2,probeYieldEvery:32,maxRadius:160,growthPerWave:0.55,jitter:1.0,seedRadius:2,seedsPerHit:4,revertPerTick:700,maxTrackedChanges:160000,seenCap:120000,fallbackScanEvery:80,validateEvery:10,angerConvBonusCap:3});
+const CFG=Object.freeze({
+  enabled:true,
+  // enable debug logging so watchdogs are always active
+  debug:true,
+  tickInterval:6,
+  wavePortalsPerTick:1,
+  // increase conversions per tick to improve spread
+  conversionsPerTick:6,
+  // allow more attempts per tick so the queue drains better
+  maxAttemptsPerTick:32,
+  // increase generation rates for more wave seeds
+  genBase:32,
+  genPerRadius:0.20,
+  genCap:96,
+  // increase number of cluster seeds generated per wave
+  clusterPerWave:2,
+  maxQueue:2600,
+  undergroundDepth:4,
+  ySearchRadius:10,
+  seekDown:64,
+  seekUp:32,
+  seekUpMax:128,
+  recenterOnSolid:true,
+  recenterModulo:3,
+  fullScanUp:56,
+  fullScanDown:96,
+  probeStep:2,
+  probeYieldEvery:32,
+  maxRadius:160,
+  // increase growth per wave so radius expands steadily and more territory is covered
+  growthPerWave:0.65,
+  jitter:1.0,
+  // enlarge corruption seed radius and seeds per hit for bigger patches
+  seedRadius:4,
+  seedsPerHit:6,
+  revertPerTick:700,
+  maxTrackedChanges:160000,
+  seenCap:120000,
+  fallbackScanEvery:80,
+  validateEvery:10,
+  // disable anger bonus since lives/anger system is removed
+  angerConvBonusCap:0
+});
 /* FX: fog only (hell) around portal atlas, expands with p.radius.
  fogBase/fogScale are halved vs old v8.
 */
 const FX=Object.freeze({fog:true,fogTick:16,fogBase:8,fogScale:0.275,fogName:"Vanilla_Nether",fogId:"minecraft:fog_hell"});
 const DIM="minecraft:overworld",PORTAL_ID="minecraft:portal",ANCHOR_ID="netherlands:portal_atlas";
 const TAG_PORTAL="nc_portal",TAG_BIO="nc_bio:",TAG_PID="nc_pid:",TAG_R="nc_r:",TAG_B0="nc_b0:",TAG_B1="nc_b1:";
+// Tag for converted block count
+const TAG_CONV="nc_conv:";
 const N4=[{x:1,z:0},{x:-1,z:0},{x:0,z:1},{x:0,z:-1}],N8=[...N4,{x:1,z:1},{x:1,z:-1},{x:-1,z:1},{x:-1,z:-1}],GOLDEN_ANGLE=2.399963229728653;
 const log=(...a)=>{if(CFG.debug)console.warn("[NetherCorr]",...a)};
 const gb=(d,p)=>{try{return d.getBlock(p)}catch{return}},dim=()=>{try{return world.getDimension(DIM)}catch{return}};
@@ -36,6 +80,33 @@ let portalsDirty=true,portalsCache=[];let waveIdx=0;
 const PLAYER_FOG=new Map();
 function setRadiusTag(p){const e=p?.e;if(!e)return;const r=((p.radius??0)+0.5)|0;if(p.rt===r)return;p.rt=r;try{for(const t of e.getTags())if(t.startsWith(TAG_R))e.removeTag(t)}catch{}try{e.addTag(TAG_R+r)}catch{}}
 function setBoundsTags(p){const e=p?.e,b=p?.bounds;if(!e||!b)return;const v0=(b.minX|0)+","+(b.minY|0)+","+(b.minZ|0),v1=(b.maxX|0)+","+(b.maxY|0)+","+(b.maxZ|0);try{for(const t of e.getTags())if(t.startsWith(TAG_B0)||t.startsWith(TAG_B1))e.removeTag(t)}catch{}try{e.addTag(TAG_B0+v0);e.addTag(TAG_B1+v1)}catch{}}
+
+// Write the converted block count tag on the portal entity. Removes any existing nc_conv tags and writes the new value.
+function setConvTag(p){const e=p?.e;if(!e)return;const val=(p.convertedCount??0)|0;
+  try{for(const t of e.getTags())if(t.startsWith(TAG_CONV))e.removeTag(t)}catch{}
+  try{e.addTag(TAG_CONV+val)}catch{}
+}
+
+// Reposition the chunk loading entities for a portal around its current radius. These loaders
+// keep outer chunks loaded as the corruption expands.
+function updateChunkLoaders(p){
+  const loaders=p?.chunkLoaders;
+  if(!loaders||!loaders.length)return;
+  const count=loaders.length;
+  // radius to place loaders: a bit beyond the current corruption radius
+  const radius=Math.min(CFG.maxRadius,p.radius??0)+8;
+  const cx=(p.cx??0)+0.5;
+  const cz=(p.cz??0)+0.5;
+  const cy=((p.bounds?p.bounds.minY:p.cy)??0)+1.5;
+  for(let i=0;i<count;i++){
+    const angle=(i*(2*Math.PI))/count;
+    const x=cx+Math.cos(angle)*radius;
+    const z=cz+Math.sin(angle)*radius;
+    const y=cy;
+    const ent=loaders[i];
+    try{ent.teleport({x,y,z});}catch{}
+  }
+}
 function hashU32(str){let h=2166136261>>>0;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
 function xorshift32(x){x^=x<<13;x^=x>>>17;x^=x<<5;return x>>>0}
 function rand01(p){p.rng=xorshift32(p.rng>>>0);return(p.rng>>>0)/4294967296}
@@ -64,8 +135,54 @@ function upsertPortalAt(d,x,y,z){const bounds=computeBounds(d,x,y,z,24);if(!boun
   try{e.addTag(TAG_PORTAL);e.addTag(TAG_PID+pid)}catch{}
   initLivesIfMissing(e);armIfMissing(e,system.currentTick|0);
   const bio=pickBiome();setBioOnEntity(e,bio);
-  const p={pid,dimId:DIM,e,bounds,cx:bounds.cx|0,cy:bounds.cy|0,cz:bounds.cz|0,bio:bio|0,anger:0,spreadMul:1,mobMul:1,radius:2,step:0,rng:hashU32(pid),changes:new Map(),changeKeys:[],spreadDisabled:false,paused:false,sealed:false,gx:bounds.cx|0,gy:bounds.minY|0,gz:bounds.cz|0,lx:bounds.cx|0,ly:bounds.minY|0,lz:bounds.cz|0,lt:0,rt:-1};
+  const p={
+    pid,
+    dimId:DIM,
+    e,
+    bounds,
+    cx:bounds.cx|0,
+    cy:bounds.cy|0,
+    cz:bounds.cz|0,
+    bio:bio|0,
+    anger:0,
+    spreadMul:1,
+    mobMul:1,
+    radius:2,
+    step:0,
+    rng:hashU32(pid),
+    changes:new Map(),
+    changeKeys:[],
+    spreadDisabled:false,
+    paused:false,
+    sealed:false,
+    gx:bounds.cx|0,
+    gy:bounds.minY|0,
+    gz:bounds.cz|0,
+    lx:bounds.cx|0,
+    ly:bounds.minY|0,
+    lz:bounds.cz|0,
+    lt:0,
+    rt:-1,
+    // track total converted blocks
+    convertedCount:0,
+    // tick counter for how long the portal has been active
+    activeTicks:0,
+    // schedule for spawning portal anger entities (600 ticks ~30s)
+    nextAngerSpawnTick:(system.currentTick|0)+600,
+    // array of spawned chunk loading entities
+    chunkLoaders:[]
+  };
   PORTALS.set(pid,p);portalsDirty=true;syncPortalAggro(p);setRadiusTag(p);setBoundsTags(p);
+  // initialize conversion tag
+  setConvTag(p);
+  // Spawn chunk loading entities for this portal. They will be repositioned each tick.
+  try{
+    const loaders=6;
+    for(let i=0;i<loaders;i++){
+      const loader=d.spawnEntity("netherlands:chunk_loading",{x:bounds.cx+0.5,y:bounds.minY+1,z:bounds.cz+0.5});
+      p.chunkLoaders.push(loader);
+    }
+  }catch{}
   for(let i=0;i<12;i++){const px=ri(bounds.minX,bounds.maxX),pz=ri(bounds.minZ,bounds.maxZ);enqueue(px,bounds.minY|0,pz,bio,pid)}
   log("Portal registered",pid)
 }
@@ -114,6 +231,9 @@ function doConversion(d,tick,cap){let done=0,tries=0;const lim=(cap??CFG.convers
     const n=Q[qh++],p=PORTALS.get(n.pid);if(!p||p.spreadDisabled||p.paused)continue;
     const target=findTarget(d,n.x,n.y,n.z,n.bio,tick,p);if(!target){p.lx=n.x|0;p.ly=n.y|0;p.lz=n.z|0;p.lt=tick;continue}
     if(!setBlockTracked(d,target.x,target.y,target.z,target.to,n.pid))continue;
+    // increment converted count and update conversion tag
+    const pConv=PORTALS.get(n.pid);
+    if(pConv){pConv.convertedCount=(pConv.convertedCount||0)+1;setConvTag(pConv);}
     const setter=makeSetter(n.pid);
     cleanupSurfaceRing(d,target.x,target.y,target.z,n.bio,setter);
     decorateAfterConversion(d,target.x,target.y,target.z,n.bio,setter);
@@ -140,14 +260,35 @@ function mossifyTick(d){for(const[pid,r]of REVERTING){let n=0;while(r.idx<r.keys
       if(r.idx>=r.keys.length)REVERTING.delete(pid);
       if(n>=CFG.revertPerTick)break;
   }}
-function validatePortals(d,t){for(const[pId,p]of PORTALS){if(p.paused)continue;try{if(!p.e||typeof p.e.isValid==="function"&&!p.e.isValid())continue}catch{continue}
-    let ok=false;const b=p.bounds;
-    if(b){ok=volHas(d,new BlockVolume({x:b.minX,y:b.minY,z:b.minZ},{x:b.maxX,y:b.maxY,z:b.maxZ}),PORTAL_ID)}
-    else{ok=volHas(d,new BlockVolume({x:p.cx-2,y:p.cy-2,z:p.cz-2},{x:p.cx+2,y:p.cy+2,z:p.cz+2}),PORTAL_ID)}
-    if(ok){onPortalOk(p);continue}
-    if(!isArmed(p.e,t)){startMossify(pId);continue}
-    if(onPortalBroken(d,p))startMossify(pId);
-  }}
+function validatePortals(d,t){
+  for(const [pId,p] of PORTALS){
+    // skip invalid anchor
+    try{
+      if(!p.e || (typeof p.e.isValid === "function" && !p.e.isValid())) continue;
+    }catch{continue}
+    // Determine if there is any portal block still present within its bounds
+    let exists=false;
+    const b=p.bounds;
+    if(b){
+      exists=volHas(d,new BlockVolume({x:b.minX,y:b.minY,z:b.minZ},{x:b.maxX,y:b.maxY,z:b.maxZ}),PORTAL_ID);
+    }else{
+      exists=volHas(d,new BlockVolume({x:p.cx-2,y:p.cy-2,z:p.cz-2},{x:p.cx+2,y:p.cy+2,z:p.cz+2}),PORTAL_ID);
+    }
+    if(exists){
+      // Portal exists: if previously paused/broken, unpause and call onPortalOk
+      if(p.paused){
+        p.paused=false;
+        onPortalOk(p);
+      }
+      continue;
+    }
+    // No portal blocks: mark as paused and call onPortalBroken (adds broken tag)
+    if(!p.paused){
+      p.paused=true;
+      onPortalBroken(d,p);
+    }
+  }
+}
 const esc=s=>String(s??"").replace(/\\/g,"\\\\").replace(/\"/g,"\\\"");
 function fogTick(d){if(!FX.fog)return;let players;try{players=world.getPlayers()}catch{return}if(!players?.length)return;
   const portals=portalsArr();
@@ -163,18 +304,24 @@ function tick(){if(!CFG.enabled)return;const d=dim();if(!d)return;const t=system
   if((t%CFG.validateEvery)===0){if(PORTALS.size===0)rebuildAnchors(d);validatePortals(d,t)}
   if((t%CFG.fallbackScanEvery)===0)scanForNewPortals(d);
   const arr=portalsArr();
-  // Gold seal can pause portals (no spread + no lives + no spawns, no purification)
-  for(const p of arr)updateGoldSeal(d,p,t);
-  // Pause corruption when the portal is broken and waiting for manual relight
+  // Update chunk loaders and spawn portal anger entities on schedule
   for(const p of arr){
-    if(p.spreadDisabled) continue;
-    try{
-      if(isRelightPaused(p.e,t)) p.paused = true;
-      else p.paused = false;
-    }catch{
-      // if check fails, leave paused as-is
+    // reposition chunk loaders regardless of paused state to keep area loaded
+    updateChunkLoaders(p);
+    // spawn portal_anger every 30 seconds when portal is active
+    if(!p.paused){
+      if(!p.nextAngerSpawnTick) p.nextAngerSpawnTick=t+600;
+      if(t>=p.nextAngerSpawnTick){
+        try{
+          d.spawnEntity("netherlands:portal_anger",{x:p.cx+0.5,y:p.cy+0.5,z:p.cz+0.5});
+        }catch{}
+        p.nextAngerSpawnTick=t+600;
+      }
+      p.activeTicks=(p.activeTicks||0)+CFG.tickInterval;
     }
   }
+  // Gold seal can pause portals (no spread + no lives + no spawns, no purification)
+  for(const p of arr)updateGoldSeal(d,p,t);
   let maxA=0;const active=[];for(const p of arr){if(p.spreadDisabled||p.paused)continue;active.push(p);const a=p.anger|0;if(a>maxA)maxA=a}
   if(active.length){for(let i=0;i<CFG.wavePortalsPerTick;i++){const p=active[(waveIdx++%active.length)];genWave(p)}}
   doConversion(d,t,CFG.conversionsPerTick+Math.min(CFG.angerConvBonusCap,maxA));

@@ -15,7 +15,33 @@ HM.damage/damageEvery: player damage near the tendril head
 HM.maxTendrils: anger decides 1..max tendrils
 HM.thickAt/thickSmall/thickBig: 2..3 block thickness based on corruption size
 */
-const HM=Object.freeze({enabled:false,typeHive:"netherlands:hive_mind",typeAtlas:"netherlands:portal_atlas",tagPortal:"nc_portal",tagAnger:"nc_anger:",tagR:"nc_r:",block:"netherlands:fragile_obsidian",minRadius:20,lifeTicks:600,stepEvery:3,placeCap:72,removeCap:48,maxPlaced:5200,damage:3,damageEvery:12,maxTendrils:3,thickAt:55,thickSmall:2,thickBig:3,targetRange:96,targetsEvery:10,maxTargets:48,staggerSpawn:6,staggerEnd:20});
+const HM=Object.freeze({
+  // Disable hive mind tendrils entirely.  Hive entities will not spawn tendrils.
+  enabled:false,
+  typeHive:"netherlands:hive_mind",
+  typeAtlas:"netherlands:portal_atlas",
+  tagPortal:"nc_portal",
+  tagAnger:"nc_anger:",
+  tagR:"nc_r:",
+  block:"netherlands:fragile_obsidian",
+  minRadius:20,
+  lifeTicks:600,
+  stepEvery:3,
+  placeCap:72,
+  removeCap:48,
+  maxPlaced:5200,
+  damage:3,
+  damageEvery:12,
+  maxTendrils:3,
+  thickAt:55,
+  thickSmall:2,
+  thickBig:3,
+  targetRange:96,
+  targetsEvery:10,
+  maxTargets:48,
+  staggerSpawn:6,
+  staggerEnd:20
+});
 const AIR=new Set(["minecraft:air","minecraft:cave_air","minecraft:void_air"]);
 const key=(x,y,z)=>x+"|"+y+"|"+z;
 const parse=(k)=>{const[a,b,c]=k.split("|");return{x:a|0,y:b|0,z:c|0}};

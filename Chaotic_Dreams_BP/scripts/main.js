@@ -1,5 +1,4 @@
 import "./creeper_spores";
-import "./winter_system";
 import "./netherlands/nether_cache";
 import "./netherlands/nether_mobGen";
 import "./netherlands/nether_biomePalette";

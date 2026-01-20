@@ -1,169 +1,188 @@
-import { world, system } from "@minecraft/server";
-import { isRelightPaused } from "./nether_portalLives.js";
-/* Phase 4 portal defense (rewritten)
-   This system builds a chaotic "nest" around the portal on the last life and protective domes on the second life.
-   - The nest (deformed chunks of obsidian/crying obsidian/blackstone) spawns only when anger>=CFG.nestStartAnger.
-   - A dome of blackstone begins once anger>=CFG.domeStartAnger and after a delay. When the first dome completes,
-     a second larger dome grows over it.
-   - The nest can grow vertically as well as horizontally; its Y pad scales with the chunk radius and anger.
-   - Construction pauses entirely if the portal is broken and waiting to be manually relit, and runs only while portal blocks exist.
-*/
-const CFG = Object.freeze({
-  enabled: true,
-  tickEvery: 2,
-  opsPerTick: 40,
-  nestStartAnger: 2,
-  domeStartAnger: 2,
-  mixChance: 0.45,
-  baseId: "minecraft:obsidian",
-  mixId: "minecraft:crying_obsidian",
-  stoneId: "minecraft:blackstone",
-  onlyAir: true,
-  cacheEvery: 40,
-  chunkRMin: 2,
-  chunkRMax: 6,
-  chunkAttempts: 34,
-  domeDelay: 120,
-  domePad: 6,
-  domeMinR: 18,
-  domeOpsBase: 15,
-  domeOpsAnger: 8,
-  dome1Ticks: 400,
-  dome2Ticks: 500,
-  dome2Mul: 1.35,
-  dome2Add: 14
+import{world,system}from"@minecraft/server";
+/*
+ * Phase 4 portal defense (reworked)
+ *
+ * The protective shell and domes around a portal are now triggered by the
+ * number of corrupted blocks rather than the old "anger/life" system.  Once
+ * the corruption has converted at least `convNest` blocks, a deforming
+ * protective shell (the "nest") will begin to form.  When the corruption
+ * has converted at least `convDome1` blocks, a first domed shield will begin
+ * to grow around the portal.  After converting at least `convDome2` blocks
+ * the dome will continue to grow in size, expanding outward over time.
+ *
+ * Key parameters:
+ *  - tickEvery: how often to run the defense logic (ticks)
+ *  - opsPerTick: maximum number of block placements per tick
+ *  - convNest: total conversions required to start the nest shell
+ *  - convDome1: total conversions required to begin dome construction
+ *  - convDome2: total conversions required to begin endless dome growth
+ *  - mixChance: chance that a shell block will be crying obsidian instead
+ *    of normal obsidian (for visual variation)
+ *  - eggGrowEvery: ticks between size increments of the dome once
+ *    `convDome2` has been reached
+ *  - cacheEvery: ticks between portal atlas scans (performance)
+ *  - onlyAir: if true, only replaces air/fire blocks when placing shell
+ */
+const CFG=Object.freeze({
+  tickEvery:3,
+  // increase ops per tick to help domes finish more reliably
+  opsPerTick:34,
+  // radius thresholds (in blocks) to trigger nest/dome construction
+  radNest:70,
+  radDome1:100,
+  radDome2:200,
+  // appearance
+  mixChance:0.45,
+  baseId:"minecraft:obsidian",
+  mixId:"minecraft:crying_obsidian",
+  stoneId:"minecraft:blackstone",
+  // time between growth steps for the dome once past radDome2 (very slow growth)
+  eggGrowEvery:300,
+  cacheEvery:60,
+  onlyAir:true
 });
-const DIM = "minecraft:overworld";
-const PORTAL_ID = "minecraft:portal";
-const ANCHOR = "netherlands:portal_atlas";
-const TAG_PORTAL = "nc_portal";
-const TAG_PID = "nc_pid:";
-const TAG_ANGER = "nc_anger:";
-const TAG_B0 = "nc_b0:";
-const TAG_B1 = "nc_b1:";
-const TAG_R = "nc_r:";
-const TAG_SEAL = "nc_goldseal";
-const AIRLIKE = new Set(["minecraft:air","minecraft:cave_air","minecraft:void_air","minecraft:fire","minecraft:soul_fire"]);
-function gb(d,p){try{return d.getBlock(p)}catch{}}
-function isAirLike(id){return AIRLIKE.has(id)}
-function hasPrefix(t,p){return typeof t === "string" && t.startsWith(p)}
-function getIntTag(e,prefix,def){try{for(const t of e.getTags())if(hasPrefix(t,prefix))return(parseInt(t.slice(prefix.length),10)|0)}catch{}return def|0}
-function hasTag(e,t){try{return e.getTags().includes(t)}catch{return false}}
-function getPid(e){try{for(const t of e.getTags())if(hasPrefix(t,TAG_PID))return t.slice(TAG_PID.length)}catch{};return e?.id}
-function getBounds(e){let a,b;try{for(const t of e.getTags()){if(t.startsWith(TAG_B0))a=t.slice(TAG_B0.length);else if(t.startsWith(TAG_B1))b=t.slice(TAG_B1.length)}}catch{}if(!a||!b)return null;const p0=a.split(","),p1=b.split(",");if(p0.length<3||p1.length<3)return null;const minX=p0[0]|0,minY=p0[1]|0,minZ=p0[2]|0,maxX=p1[0]|0,maxY=p1[1]|0,maxZ=p1[2]|0;const cx=((minX+maxX)>>1),cy=((minY+maxY)>>1),cz=((minZ+maxZ)>>1);return{minX,minY,minZ,maxX,maxY,maxZ,cx,cy,cz}}
-function setBlockAir(d,x,y,z,id){const b=gb(d,{x,y,z});if(!b)return false;if(CFG.onlyAir&&!isAirLike(b.typeId))return false;if(b.typeId===PORTAL_ID||b.typeId==="minecraft:bedrock")return false;try{b.setType(id);return true}catch{return false}}
-function boundsHasPortal(d,b){for(let x=b.minX;x<=b.maxX;x++)for(let y=b.minY;y<=b.maxY;y++)for(let z=b.minZ;z<=b.maxZ;z++)if(gb(d,{x,y,z})?.typeId===PORTAL_ID)return true;return false}
-const U32 = s => { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
-const R01 = s => { s.r = (Math.imul(s.r,1664525)+1013904223) >>> 0; return (s.r >>> 0)/4294967296; };
-const RI = (s,a,b) => a + ((R01(s) * (b - a + 1)) | 0);
-const TAU = 6.283185307179586;
-const STATE = new Map();
-let cache = [], nextScan = 0, ci = 0;
-function placeChunk(d,st,b,anger,budget){
-  const cx=b.cx|0,cz=b.cz|0;
-  // compute a random anchor for the chunk around the portal
-  const baseDist=Math.max((b.maxX-b.minX+1)|0,(b.maxZ-b.minZ+1)|0)*0.5+2+Math.min(anger,4);
-  const theta=R01(st)*TAU,dist=baseDist+R01(st)*3.2;
-  const ax=(cx+Math.cos(theta)*dist)|0,az=(cz+Math.sin(theta)*dist)|0;
-  let cr=(CFG.chunkRMin+R01(st)*(CFG.chunkRMax-CFG.chunkRMin+1)+(anger*0.9))|0;
-  if(cr<CFG.chunkRMin)cr=CFG.chunkRMin;if(cr>CFG.chunkRMax+anger)cr=CFG.chunkRMax+anger;
-  // vertical pad grows with radius and anger
-  const yPad=(cr+3+(anger*2))|0;
-  const y0=(b.cy|0)-yPad;
-  const y1=(b.cy|0)+yPad;
-  const rr=cr*cr;
-  let placed=0;
-  for(let i=0;i<CFG.chunkAttempts&&budget>0;i++){
-    const dx=RI(st,-cr,cr),dz=RI(st,-cr,cr);if(dx*dx+dz*dz>rr)continue;
-    const x=ax+dx,z=az+dz,y=RI(st,y0,y1);
-    let id=CFG.baseId;if(Math.random()<CFG.mixChance)id=CFG.mixId;
-    if(anger>=2&&Math.random()<0.12)id=CFG.stoneId;
+const DIM="minecraft:overworld",ANCHOR="netherlands:portal_atlas",TAG_PORTAL="nc_portal",TAG_PID="nc_pid:",TAG_ANGER="nc_anger:",TAG_CONV="nc_conv:",TAG_R="nc_r:",TAG_B0="nc_b0:",TAG_B1="nc_b1:";
+const isAirLike=id=>id==="minecraft:air"||id==="minecraft:cave_air"||id==="minecraft:void_air"||id==="minecraft:fire"||id==="minecraft:soul_fire";
+const hasPrefix=(t,p)=>typeof t==="string"&&t.startsWith(p);
+function getStrTag(e,p){try{for(const t of e.getTags())if(hasPrefix(t,p))return t.slice(p.length)}catch{}}
+function getPid(e){try{return getStrTag(e,TAG_PID)||e.id}catch{return"u"+Math.random().toString(36).slice(2,8)}}
+function getIntTag(e,p,d){try{for(const t of e.getTags())if(hasPrefix(t,p))return(parseInt(t.slice(p.length),10)|0)}catch{}return d|0}
+function getBounds(e){let a,b;try{for(const t of e.getTags()){if(t.startsWith(TAG_B0))a=t.slice(TAG_B0.length);else if(t.startsWith(TAG_B1))b=t.slice(TAG_B1.length)}}catch{}if(!a||!b)return;const p0=a.split(","),p1=b.split(",");if(p0.length<3||p1.length<3)return;const minX=p0[0]|0,minY=p0[1]|0,minZ=p0[2]|0,maxX=p1[0]|0,maxY=p1[1]|0,maxZ=p1[2]|0;return{minX,minY,minZ,maxX,maxY,maxZ}}
+const gb=(d,x,y,z)=>{try{return d.getBlock({x,y,z})}catch{}};
+function setBlockAir(d,x,y,z,id){const b=gb(d,x,y,z);if(!b)return false;if(CFG.onlyAir&&!isAirLike(b.typeId))return false;try{b.setType(id);return true}catch{return false}}
+const S=new Map();
+const h32=(s)=>{let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0};
+const mix=(h,x,y,z)=>{h^=(x*374761393)^(y*668265263)^(z*2147483647);h=Math.imul(h^(h>>>13),1274126177);return(h^(h>>>16))>>>0};
+let cache=[],nextScan=0,ci=0;
+function initIter(st,b,ex){st.ex=ex;st.minX=b.minX-ex.x;st.maxX=b.maxX+ex.x;st.minY=b.minY-ex.y;st.maxY=b.maxY+ex.y;st.minZ=b.minZ-ex.z;st.maxZ=b.maxZ+ex.z;st.x=st.minX;st.y=st.minY;st.z=st.minZ;st.done=0}
+function stepShell(d,st,pickId,budget){const minX=st.minX,maxX=st.maxX,minY=st.minY,maxY=st.maxY,minZ=st.minZ,maxZ=st.maxZ;let placed=0;while(budget>0){if(st.x>maxX){st.done=1;break}const x=st.x,y=st.y,z=st.z;st.z++;if(st.z>maxZ){st.z=minZ;st.y++;if(st.y>maxY){st.y=minY;st.x++}}if(!(x===minX||x===maxX||y===minY||y===maxY||z===minZ||z===maxZ))continue;
+    const n=mix(st.seed,x,y,z)&15; // deformed shell holes
+    if(st.mode===2&&n<4)continue;
+    const id=pickId(x,y,z);if(!id)continue;
     if(setBlockAir(d,x,y,z,id)){placed++;budget--}
-  }
-  return placed;
-}
-function domeTargetR(e,b){
-  let r=getIntTag(e,TAG_R,0)+CFG.domePad;
-  if(r<CFG.domeMinR)r=CFG.domeMinR;
-  const sx=(b.maxX-b.minX+1)|0,sz=(b.maxZ-b.minZ+1)|0;
-  const pr=(Math.max(sx,sz)*0.5+6)|0;
-  if(r<pr)r=pr;
-  return r;
-}
-function placeDome(d,st,b,anger,budget){
-  // uses st.domeR as radius, builds random positions on sphere surface
-  const cx=b.cx+0.5,cz=b.cz+0.5,baseY=(b.minY-1)|0;
-  const R=st.domeR|0;
-  let placed=0;
-  while(budget>0){
-    const u1=R01(st),u2=R01(st);
-    const theta=u1*TAU,cosPhi=u2,sinPhi=Math.sqrt(Math.max(0,1-cosPhi*cosPhi));
-    const x=(cx+R*sinPhi*Math.cos(theta))|0;
-    const z=(cz+R*sinPhi*Math.sin(theta))|0;
-    const y=(baseY+R*cosPhi)|0;
-    if(y<1||y>318){budget--;continue;}
-    if(setBlockAir(d,x,y,z,CFG.stoneId)){placed++;budget--;}
-    else budget--;
-    if(placed>=10+anger*2)break;
-  }
-  return placed;
-}
+  }return placed}
 function tick(){
-  if(!CFG.enabled)return;
   const t=system.currentTick|0;
-  if((t%CFG.tickEvery)!==0)return;
+  if((t%CFG.tickEvery)!==0) return;
   let d;
-  try{d=world.getDimension(DIM)}catch{return}
-  // refresh atlas list every cacheEvery ticks
-  if(t>=nextScan){try{cache=d.getEntities({type:ANCHOR,tags:[TAG_PORTAL]})??[]}catch{cache=[]}nextScan=t+CFG.cacheEvery;ci=0;}
-  if(!cache.length)return;
-  let ops=0,loops=0;
-  // iterate through atlas entities
-  while(ops<CFG.opsPerTick && loops<cache.length){
-    const e=cache[ci++%cache.length];loops++;
-    if(!e)continue;
-    try{if(typeof e.isValid==="function" && !e.isValid())continue;}catch{continue;}
-    // skip if sealed by gold seal
-    if(hasTag(e,TAG_SEAL))continue;
-    const anger=getIntTag(e,TAG_ANGER,0);
-    const pid=getPid(e);
-    // clear state if below thresholds
-    if(anger<CFG.domeStartAnger && anger<CFG.nestStartAnger){STATE.delete(pid);continue;}
-    // pause when portal is broken and awaiting manual relight
-    if(isRelightPaused(e,t)){
+  try{ d=world.getDimension(DIM); } catch { return; }
+  // refresh cache of portal anchors periodically
+  if(t>=nextScan){
+    try{ cache = d.getEntities({ type: ANCHOR, tags: [TAG_PORTAL] }) ?? []; }
+    catch{ cache = []; }
+    nextScan = t + CFG.cacheEvery;
+    ci = 0;
+  }
+  if(!cache.length) return;
+  let ops=0, loops=0;
+  while(ops < CFG.opsPerTick && loops < cache.length){
+    const e = cache[ci++ % cache.length];
+    loops++;
+    if(!e) continue;
+    try{ if(typeof e.isValid === "function" && !e.isValid()) continue; }catch{ continue; }
+    const pid = getPid(e);
+    // corruption radius read from the nc_r tag (integer)
+    const rad = getIntTag(e, TAG_R, 0);
+    // skip portals whose corruption radius hasn't reached the nest threshold
+    if(rad < CFG.radNest){
+      S.delete(pid);
       continue;
     }
-    const b=getBounds(e);
-    if(!b)continue;
-    // skip if there is no portal block inside bounds (portal fully destroyed)
-    if(!boundsHasPortal(d,b))continue;
-    // track state per portal
-    let st=STATE.get(pid);
+    const b = getBounds(e);
+    if(!b) continue;
+    // determine whether dome mode should be active and whether endless growth is enabled
+    const domeActive = rad >= CFG.radDome1;
+    const endlessDome = rad >= CFG.radDome2;
+    let st = S.get(pid);
+    // initialize state if new
     if(!st){
-      st={pid,seed:U32(pid),dStage:0,start:t,d0:0,domeR:0};
-      STATE.set(pid,st);
+      st = {
+        pid,
+        seed: h32(pid),
+        mode: domeActive ? 2 : 1,
+        phase: 0,
+        // shell thickness around the portal bounds
+        ex: { x: 1, y: 1, z: 1 },
+        nextGrow: 0,
+        minX: 0, maxX: 0, minY: 0, maxY: 0, minZ: 0, maxZ: 0,
+        x: 0, y: 0, z: 0,
+        done: 0
+      };
+      // if dome is already active, start with a thicker shell
+      if(domeActive){
+        st.ex.x = 2;
+        st.ex.y = 2;
+        st.ex.z = 2;
+        st.nextGrow = t + CFG.eggGrowEvery;
+      }
+      initIter(st, b, st.ex);
     }
-    // build nest if anger>=nestStartAnger
-    if(anger>=CFG.nestStartAnger){
-      let bud=Math.min(CFG.opsPerTick-ops,14);
-      ops+=placeChunk(d,st,b,anger,bud);
-    }
-    // build domes if anger>=domeStartAnger after delay
-    if(anger>=CFG.domeStartAnger && t - st.start >= CFG.domeDelay){
-      // initialize stage and radius if first time
-      if(st.dStage===0){st.dStage=1;st.d0=t;st.domeR=domeTargetR(e,b);} 
-      // if first dome complete, transition to second
-      if(st.dStage===1 && t - st.d0 >= CFG.dome1Ticks){st.dStage=2;st.d0=t;const baseR=domeTargetR(e,b);st.domeR=Math.max((baseR*CFG.dome2Mul)|0,baseR+CFG.dome2Add);} 
-      // if second dome complete, mark done
-      if(st.dStage===2 && t - st.d0 >= CFG.dome2Ticks){st.dStage=3;}
-      // if stage<3, do dome placement
-      if(st.dStage<3){
-        const domeBud=Math.min(CFG.opsPerTick-ops,CFG.domeOpsBase+anger*CFG.domeOpsAnger);
-        ops+=placeDome(d,st,b,anger,domeBud);
+    // update mode based on whether dome is active
+    if(domeActive){
+      if(st.mode !== 2){
+        // switch from nest to dome
+        st.mode = 2;
+        st.phase = 0;
+        if(st.ex.x < 2) st.ex.x = 2;
+        if(st.ex.y < 2) st.ex.y = 2;
+        if(st.ex.z < 2) st.ex.z = 2;
+        st.nextGrow = t + CFG.eggGrowEvery;
+        initIter(st, b, st.ex);
+      }
+    }else{
+      if(st.mode !== 1){
+        // switch back to nest mode
+        st.mode = 1;
+        st.phase = 0;
+        st.ex = { x: 1, y: 1, z: 1 };
+        initIter(st, b, st.ex);
       }
     }
-    // update state back
-    STATE.set(pid,st);
+    // handle phase transitions and dome growth
+    if(st.done){
+      if(st.mode === 1){
+        // nest mode has two phases: phase 0 (obsidian/crying) then phase 1 (blackstone)
+        if(st.phase === 0){
+          st.phase = 1;
+          // second layer of nest is thicker
+          initIter(st, b, { x: 2, y: 2, z: 2 });
+        } else {
+          // no more phases for nest
+          st.phase = 2;
+        }
+      } else {
+        // dome mode: continue growth if endless growth is enabled and the time has passed
+        if(endlessDome){
+          if(t >= st.nextGrow){
+            st.nextGrow = t + CFG.eggGrowEvery;
+            // randomize growth in each dimension
+            st.ex.x += ((mix(st.seed, t, st.ex.x, 1) & 1));
+            st.ex.y += ((mix(st.seed, t, st.ex.y, 2) & 1));
+            st.ex.z += ((mix(st.seed, t, st.ex.z, 3) & 1));
+            initIter(st, b, st.ex);
+          } else {
+            // wait for next growth tick
+            S.set(pid, st);
+            continue;
+          }
+        } else {
+          // not endless: once done with current shell, stop any further dome growth
+          // do nothing; allow stepShell to proceed
+        }
+      }
+    }
+    // if nest has finished both phases, do nothing further
+    if(st.mode === 1 && st.phase === 2){
+      S.set(pid, st);
+      continue;
+    }
+    // choose block id to place: nest uses stone on phase 1; otherwise obsidian/crying mix
+    const pick = (st.mode === 1 && st.phase === 1)
+      ? (() => CFG.stoneId)
+      : (() => (Math.random() < CFG.mixChance ? CFG.mixId : CFG.baseId));
+    // perform placement work
+    ops += stepShell(d, st, pick, CFG.opsPerTick - ops);
+    S.set(pid, st);
   }
 }
-system.runInterval(tick,1);
+system.runInterval(tick, 1);

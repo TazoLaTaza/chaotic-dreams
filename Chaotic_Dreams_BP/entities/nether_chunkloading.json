@@ -1,0 +1,83 @@
+{
+ "format_version": "1.21.50",
+    "minecraft:entity": {
+   "description": {
+    "identifier": "netherlands:chunk_loading",
+    "is_spawnable": false,
+    "is_summonable": true,
+    "is_experimental": false
+  },
+		"component_groups": {
+				"despawn": {
+				"minecraft:instant_despawn": {}
+			}
+		},
+  "components": {
+           "minecraft:collision_box": {
+				"height": 0.1,
+				"width": 0.1
+			},
+            "minecraft:tick_world": {
+				"distance_to_players": 128,
+				"never_despawn": true,
+				"radius": 4
+			},
+			"minecraft:health": {
+				"value": 60
+			},
+			"minecraft:physics": {
+				"has_collision": false,
+				"has_gravity": false
+			},
+			"minecraft:on_death": {
+				"event": "netherlands:death"
+			}
+			  },
+		"events": {
+      "minecraft:entity_spawned": {
+"randomize": [
+  {
+    "weight": 1,
+    "queue_command": {
+         "command":[
+          "function nether_angerA"
+         ]
+    }
+  },
+    {
+          "weight": 1,
+    "queue_command": {
+         "command":[
+          "function nether_angerB"
+         ]
+    }
+  },
+    {
+          "weight": 1,
+    "queue_command": {
+         "command":[
+          "function nether_angerC"
+         ]
+    }
+  },
+    {
+          "weight": 1,
+    "queue_command": {
+         "command":[
+          "function nether_angerD"
+         ]
+    }
+  }
+]
+
+      },
+			"netherlands:death": {
+				"add": {
+					"component_groups": [
+						"despawn"
+					]
+				}
+			}
+		}
+	}
+}
