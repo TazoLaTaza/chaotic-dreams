@@ -55,8 +55,23 @@ function getIntTag(e,prefix,def){try{for(const t of e.getTags())if(t?.startsWith
 function nearestAtlas(d,loc,range){let best=null,bd=1e18;let arr=[];try{arr=d.getEntities({type:HM.typeAtlas,tags:[HM.tagPortal],location:loc,maxDistance:range})??[]}catch{}for(const e of arr){const l=e.location;const dx=l.x-loc.x,dz=l.z-loc.z;const dd=dx*dx+dz*dz;if(dd<bd){bd=dd;best=e}}return best}
 
 const ACTIVE=new Map();
+const OFFSETS_THICK_SMALL=[
+  {dx:0,dz:0,dy:0},
+  {dx:1,dz:0,dy:0},
+  {dx:-1,dz:0,dy:0},
+  {dx:0,dz:1,dy:0},
+  {dx:0,dz:-1,dy:0},
+  {dx:0,dz:0,dy:1},
+  {dx:0,dz:0,dy:-1}
+];
+const OFFSETS_THICK_BIG=(()=>{
+  const off=[];
+  for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++)off.push({dx,dz,dy:0});
+  off.push({dx:0,dz:0,dy:1},{dx:0,dz:0,dy:-1});
+  return off;
+})();
 
-function placeBlob(d,tr,x,y,z,thick,cx,cz,rr){const off=[];if(thick>=3){for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++)off.push({dx,dz,dy:0});off.push({dx:0,dz:0,dy:1},{dx:0,dz:0,dy:-1})}else{off.push({dx:0,dz:0,dy:0},{dx:1,dz:0,dy:0},{dx:-1,dz:0,dy:0},{dx:0,dz:1,dy:0},{dx:0,dz:-1,dy:0},{dx:0,dz:0,dy:1},{dx:0,dz:0,dy:-1})}
+function placeBlob(d,tr,x,y,z,thick,cx,cz,rr){const off=thick>=3?OFFSETS_THICK_BIG:OFFSETS_THICK_SMALL;
   for(const o of off){if(tr.placeBudget<=0)break;const px=x+o.dx,py=y+o.dy,pz=z+o.dz;if(py<1||py>318)continue;const dx=px-cx,dz=pz-cz;if((dx*dx+dz*dz)>rr)continue;const b=gb(d,{x:px,y:py,z:pz});if(!b)continue;const id=b.typeId;if(id==="minecraft:bedrock"||id==="minecraft:portal")continue;try{b.setType(HM.block)}catch{continue}
     const k=key(px,py,pz);if(!tr.set.has(k)){tr.set.add(k);tr.list.push(k);if(tr.list.length>HM.maxPlaced)tr.over=true}
     tr.placeBudget--;

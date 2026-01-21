@@ -36,6 +36,7 @@ const CFG=Object.freeze({
   maxQueue:2600,
   // limit underground conversion to shallow depths to avoid excessive underground spread
   undergroundDepth:1,
+  undergroundLimit:32,
   ySearchRadius:8,
   seekDown:48,
   seekUp:32,
@@ -69,6 +70,10 @@ const CFG=Object.freeze({
 */
 const FX=Object.freeze({fog:true,fogTick:16,fogBase:8,fogScale:0.275,fogName:"Vanilla_Nether",fogId:"minecraft:fog_hell"});
 const DIM="minecraft:overworld",PORTAL_ID="minecraft:portal",ANCHOR_ID="netherlands:portal_atlas";
+const PORTAL_ANGER_ID="netherlands:portal_anger";
+const HIVE_MIND_ID="netherlands:hive_mind";
+const CHUNK_LOADER_ID="netherlands:chunk_loading";
+const WISP_ID="netherlands:wisp";
 const TAG_PORTAL="nc_portal",TAG_BIO="nc_bio:",TAG_PID="nc_pid:",TAG_R="nc_r:",TAG_B0="nc_b0:",TAG_B1="nc_b1:";
 // Tag for converted block count
 const TAG_CONV="nc_conv:";
@@ -77,11 +82,14 @@ const TAG_NONEST="nc_nonest";
 const N4=[{x:1,z:0},{x:-1,z:0},{x:0,z:1},{x:0,z:-1}],N8=[...N4,{x:1,z:1},{x:1,z:-1},{x:-1,z:1},{x:-1,z:-1}],GOLDEN_ANGLE=2.399963229728653;
 const log=(...a)=>{if(CFG.debug)console.warn("[NetherCorr]",...a)};
 const gb=(d,p)=>{try{return d.getBlock(p)}catch{return}},dim=()=>{try{return world.getDimension(DIM)}catch{return}};
-const isAir=id=>id==="minecraft:air"||id==="minecraft:cave_air"||id==="minecraft:void_air";
-const isWater=id=>id==="minecraft:water"||id==="minecraft:flowing_water";
-const isExposure=id=>isAir(id)||isWater(id)||id==="minecraft:lava"||id===PORTAL_ID||id==="minecraft:fire"||id==="minecraft:soul_fire";
-const posKey=(x,y,z)=>x+"|"+y+"|"+z;
-const parseKey=k=>{const[a,b,c]=k.split("|");return{x:a|0,y:b|0,z:c|0}};
+const AIR_IDS=new Set(["minecraft:air","minecraft:cave_air","minecraft:void_air"]);
+const WATER_IDS=new Set(["minecraft:water","minecraft:flowing_water"]);
+const EXPOSURE_IDS=new Set(["minecraft:lava",PORTAL_ID,"minecraft:fire","minecraft:soul_fire"]);
+const isAir=id=>AIR_IDS.has(id);
+const isWater=id=>WATER_IDS.has(id);
+const isExposure=id=>isAir(id)||isWater(id)||EXPOSURE_IDS.has(id);
+const posKey=(x,y,z)=>`${x}|${y}|${z}`;
+const parseKey=k=>{const i0=k.indexOf("|");const i1=k.indexOf("|",i0+1);return{x:k.slice(0,i0)|0,y:k.slice(i0+1,i1)|0,z:k.slice(i1+1)|0}};
 const Q=[];let qh=0;const SEEN=new Set();
 const PORTALS=new Map();
 const OWNERS=new Map();
@@ -134,6 +142,36 @@ function convertAllCorrupted(p,d){
   try{
     p.e?.addTag?.(TAG_NONEST);
   }catch{}
+}
+
+function removeEntitySafe(e){try{e?.remove?.()}catch{}}
+
+function cleanupPortalEntities(p,d){
+  if(!p||!d) return;
+  const center={x:(p.cx??0)+0.5,y:(p.cy??0)+0.5,z:(p.cz??0)+0.5};
+  const radius=Math.max(16,(p.radius??0)+8);
+  try{
+    const wisps=d.getEntities({type:WISP_ID,location:center,maxDistance:radius,tags:[TAG_PID+p.pid]})??[];
+    for(const e of wisps) removeEntitySafe(e);
+  }catch{}
+  try{
+    const hives=d.getEntities({type:HIVE_MIND_ID,location:center,maxDistance:radius})??[];
+    for(const e of hives) removeEntitySafe(e);
+  }catch{}
+  try{
+    const angers=d.getEntities({type:PORTAL_ANGER_ID,location:center,maxDistance:radius})??[];
+    for(const e of angers) removeEntitySafe(e);
+  }catch{}
+  if(p.chunkLoaders?.length){
+    for(const loader of p.chunkLoaders) removeEntitySafe(loader);
+    p.chunkLoaders.length=0;
+  }else{
+    try{
+      const loaders=d.getEntities({type:CHUNK_LOADER_ID,location:center,maxDistance:radius})??[];
+      for(const e of loaders) removeEntitySafe(e);
+    }catch{}
+  }
+  removeEntitySafe(p.e);
 }
 
 // Remove all queued conversion tasks for a given portal id.  Without purging,
@@ -386,19 +424,28 @@ function genWave(p){if(p.spreadDisabled||p.paused)return;const qsz=Q.length-qh;i
 }
 function sideExposed(d,x,y,z){for(const o of N4){const b=gb(d,{x:x+o.x,y,z:z+o.z});if(b&&isExposure(b.typeId))return true}return false}
 function trySurfaceSnap(d,x,y0,z){const b0=gb(d,{x,y:y0,z});if(!b0)return;
+  const maxDown=Math.min(CFG.seekDown,CFG.undergroundLimit);
   if(isAir(b0.typeId)){
-    for(let i=0;i<CFG.seekDown;i++){const yy=y0-i,b=gb(d,{x,y:yy,z});if(!b||isAir(b.typeId))continue;const a=gb(d,{x,y:yy+1,z});if(a&&isExposure(a.typeId)||sideExposed(d,x,yy,z))return yy}
+    for(let i=0;i<maxDown;i++){const yy=y0-i,b=gb(d,{x,y:yy,z});if(!b||isAir(b.typeId))continue;const a=gb(d,{x,y:yy+1,z});if(a&&isExposure(a.typeId)||sideExposed(d,x,yy,z))return yy}
     return;
   }
   let airY;
   for(let step=8,dy=step;dy<=CFG.seekUpMax;dy+=step){const yy=y0+dy,b=gb(d,{x,y:yy,z});if(!b)continue;if(isAir(b.typeId)){airY=yy;break}if(dy>=48&&step<16)step=16}
   if(airY==null)return;
-  for(let i=1;i<=CFG.seekDown;i++){const yy=airY-i,b=gb(d,{x,y:yy,z});if(!b||isAir(b.typeId))continue;const a=gb(d,{x,y:yy+1,z});if(a&&isExposure(a.typeId)||sideExposed(d,x,yy,z))return yy}
+  for(let i=1;i<=maxDown;i++){const yy=airY-i,b=gb(d,{x,y:yy,z});if(!b||isAir(b.typeId))continue;const a=gb(d,{x,y:yy+1,z});if(a&&isExposure(a.typeId)||sideExposed(d,x,yy,z))return yy}
 }
 function findTarget(d,x,yHint,z,bio,tick,p){let y0=colGet(DIM,x,z,tick);if(y0==null)y0=yHint|0;
+  const minY=y0-CFG.undergroundLimit;
   const ys=trySurfaceSnap(d,x,y0,z);if(ys!=null){const b=gb(d,{x,y:ys,z});if(b){const to=getConversionTarget(b.typeId,bio,true);if(to){colSet(DIM,x,z,ys,tick);return{x,y:ys,z,to}}}}
   const r=CFG.ySearchRadius;
-  for(let i=0;i<=r;i++)for(const yy of(i?[y0+i,y0-i]:[y0])){const b=gb(d,{x,y:yy,z});if(!b||isAir(b.typeId))continue;const a=gb(d,{x,y:yy+1,z});if(!(a&&isExposure(a.typeId))&&!sideExposed(d,x,yy,z))continue;const to=getConversionTarget(b.typeId,bio,true);if(!to)continue;colSet(DIM,x,z,yy,tick);return{x,y:yy,z,to}}
+  for(let i=0;i<=r;i++){
+    if(i===0){
+      const b=gb(d,{x,y:y0,z});if(!b||isAir(b.typeId))continue;const a=gb(d,{x,y:y0+1,z});if(!(a&&isExposure(a.typeId))&&!sideExposed(d,x,y0,z))continue;const to=getConversionTarget(b.typeId,bio,true);if(!to)continue;colSet(DIM,x,z,y0,tick);return{x,y:y0,z,to};
+    }else{
+      let yy=y0+i;let b=gb(d,{x,y:yy,z});if(b&&!isAir(b.typeId)){const a=gb(d,{x,y:yy+1,z});if((a&&isExposure(a.typeId))||sideExposed(d,x,yy,z)){const to=getConversionTarget(b.typeId,bio,true);if(to){colSet(DIM,x,z,yy,tick);return{x,y:yy,z,to}}}}
+      yy=y0-i;if(yy<minY)continue;b=gb(d,{x,y:yy,z});if(!b||isAir(b.typeId))continue;const a=gb(d,{x,y:yy+1,z});if(!(a&&isExposure(a.typeId))&&!sideExposed(d,x,yy,z))continue;const to=getConversionTarget(b.typeId,bio,true);if(!to)continue;colSet(DIM,x,z,yy,tick);return{x,y:yy,z,to};
+    }
+  }
   if(p&&CFG.recenterOnSolid&&((tick%CFG.recenterModulo)===0)){const b=gb(d,{x,y:y0,z});if(b&&!isAir(b.typeId)){const a=gb(d,{x,y:y0+1,z});if(a&&isExposure(a.typeId))colSet(DIM,x,z,y0,tick)}}
   requestProbe(x,y0,z,bio,p.pid,tick);
 }
@@ -422,7 +469,7 @@ function doConversion(d,tick,cap){let done=0,tries=0;const lim=(cap??CFG.convers
   }}
 function requestProbe(x,y0,z,bio,pid,tick){const k=posKey(x,0,z);if(PROBE_SEEN.has(k))return;PROBE_SEEN.add(k);PROBE_Q.push({x:x|0,y0:y0|0,z:z|0,bio:bio|0,pid,dimId:DIM,tick:tick|0});if(PROBE_SEEN.size>60000)PROBE_SEEN.clear();if(!PROBE_ACTIVE)system.runJob(probeRunner())}
 function* probeRunner(){PROBE_ACTIVE=true;const d=dim();while(PROBE_Q.length){const task=PROBE_Q.shift(),p=PORTALS.get(task.pid);if(!d||!p||p.spreadDisabled||p.paused)continue;let ops=0;
-    const x=task.x,z=task.z,y=task.y0|0,top=y+CFG.fullScanUp,bot=y-CFG.fullScanDown;
+    const x=task.x,z=task.z,y=task.y0|0,top=y+CFG.fullScanUp,bot=Math.max(y-CFG.fullScanDown,y-CFG.undergroundLimit);
     for(let yy=top;yy>=bot;yy-=CFG.probeStep){const b=gb(d,{x,y:yy,z});if(!b||isAir(b.typeId))continue;const a=gb(d,{x,y:yy+1,z});if(!(a&&isExposure(a.typeId))&&!sideExposed(d,x,yy,z))continue;const to=getConversionTarget(b.typeId,task.bio,true);if(!to)continue;
         colSet(DIM,x,z,yy,task.tick);enqueue(x,yy,z,task.bio,task.pid);break;
       }
@@ -462,7 +509,12 @@ function validatePortals(d,t){
     // No portal blocks present: convert all corrupted blocks back to moss/leaves.
     // Purge any queued tasks for this portal so they don't stall conversion for others.
     convertAllCorrupted(p,d);
+    cleanupPortalEntities(p,d);
     purgeQueueForPid(pId);
+    p.spreadDisabled=true;
+    p.paused=true;
+    PORTALS.delete(pId);
+    portalsDirty=true;
   }
 }
 const esc=s=>String(s??"").replace(/\\/g,"\\\\").replace(/\"/g,"\\\"");

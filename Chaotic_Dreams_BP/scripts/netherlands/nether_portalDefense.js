@@ -44,7 +44,7 @@ const CFG=Object.freeze({
   mixId:"minecraft:crying_obsidian",
   stoneId:"minecraft:blackstone",
   // time between growth steps for the dome once past radDome2 (very slow growth)
-  eggGrowEvery:300,
+  eggGrowEvery:240,
   cacheEvery:60,
   onlyAir:true,
   // disable endless dome growth.  When false the dome stops growing once
