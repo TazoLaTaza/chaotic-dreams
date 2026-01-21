@@ -34,6 +34,7 @@ const IMMUNE = new Set([
   "minecraft:bedrock",
   "minecraft:barrier",
   "minecraft:portal",
+  "minecraft:gold_block",
   "minecraft:end_portal",
   "minecraft:end_portal_frame",
   "minecraft:nether_portal",

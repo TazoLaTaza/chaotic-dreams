@@ -221,6 +221,9 @@ function spawnChildPortals(parent,d,tick){
       nextAngerSpawnTick:(system.currentTick|0)+1200,
       chunkLoaders:[],
       childrenSpawned:false
+      ,
+      // tick when portal frame was last seen broken; used to stop moss after delay
+      brokenAt: undefined
     };
     PORTALS.set(pid,p);
     portalsDirty=true;
@@ -325,6 +328,9 @@ function upsertPortalAt(d,x,y,z){const bounds=computeBounds(d,x,y,z,24);if(!boun
     ,
     // flag to spawn additional child portals after long activity
     childrenSpawned:false
+      ,
+      // tick when portal frame was last seen broken; used to stop moss after delay
+      brokenAt: undefined
   };
   PORTALS.set(pid,p);portalsDirty=true;syncPortalAggro(p);setRadiusTag(p);setBoundsTags(p);
   // initialize conversion tag
@@ -358,6 +364,8 @@ function rebuildAnchors(d){let anchors=[];try{anchors=d.getEntities({type:ANCHOR
         const sz = bounds ? ri(bounds.minZ,bounds.maxZ) : cz;
         enqueue(sx,by,sz,bio,pid);
       }
+      // initialize brokenAt for reconstructed portals
+      p.brokenAt = undefined;
       // Spawn chunk loading entities for the reconstructed portal.  When players leave
       // and rejoin, the previous p.chunkLoaders array will be lost, so respawn loaders
       // to ensure the corruption area stays loaded.  These loaders will be repositioned
@@ -458,17 +466,36 @@ function validatePortals(d,t){
       exists=volHas(d,new BlockVolume({x:p.cx-2,y:p.cy-2,z:p.cz-2},{x:p.cx+2,y:p.cy+2,z:p.cz+2}),PORTAL_ID);
     }
     if(exists){
-      // Portal exists: if previously paused, unpause and notify portal OK
+      // Portal exists: reset broken state and unpause if needed
+      if(p.brokenAt!==undefined){
+        p.brokenAt=undefined;
+      }
       if(p.paused){
         p.paused=false;
+        p.spreadDisabled=false;
         onPortalOk(p);
       }
       continue;
     }
-    // No portal blocks present: convert all corrupted blocks back to moss/leaves.
-    // Purge any queued tasks for this portal so they don't stall conversion for others.
+    // No portal blocks present: the portal frame has been broken.
+    // Record the tick when it first broke.
+    if(p.brokenAt===undefined){
+      p.brokenAt=t;
+    }
+    // For the first few seconds after breaking, continue converting all corrupted blocks back to moss
+    // so that lingering conversions are cleaned up.  The interval is 80 ticks (~4 seconds).
+    if((t - p.brokenAt) < 80){
+      convertAllCorrupted(p,d);
+      // We still purge queued tasks to reduce lag
+      purgeQueueForPid(pId);
+      continue;
+    }
+    // After the delay has passed, perform one final clean up and then pause further spread to prevent
+    // new corruption from spawning.  This stops the moss activity and corruption to reduce lag.
     convertAllCorrupted(p,d);
     purgeQueueForPid(pId);
+    p.paused=true;
+    p.spreadDisabled=true;
   }
 }
 const esc=s=>String(s??"").replace(/\\/g,"\\\\").replace(/\"/g,"\\\"");
