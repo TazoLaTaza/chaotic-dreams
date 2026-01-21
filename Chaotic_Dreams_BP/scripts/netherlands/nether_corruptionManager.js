@@ -1,5 +1,5 @@
 import{world,system,BlockVolume}from"@minecraft/server";
-import{pickBiome,mutateBiome,getConversionTarget}from"./nether_biomePalette.js";
+import{pickBiome,mutateBiome,getConversionTarget,isNetherBlock}from"./nether_biomePalette.js";
 import{decorateAfterConversion,cleanupSurfaceRing}from"./nether_decorators.js";
 import{tickCorruptionSpawns,recordSpreadPoint}from"./nether_mobGen.js";
 import{colGet,colSet}from"./nether_cache.js";
@@ -88,6 +88,8 @@ const isWater=id=>id==="minecraft:water"||id==="minecraft:flowing_water";
 const isExposure=id=>isAir(id)||isWater(id)||id==="minecraft:lava"||id===PORTAL_ID||id==="minecraft:fire"||id==="minecraft:soul_fire";
 const posKey=(x,y,z)=>x+"|"+y+"|"+z;
 const parseKey=k=>{const[a,b,c]=k.split("|");return{x:a|0,y:b|0,z:c|0}};
+const hasPrefix=(t,p)=>typeof t==="string"&&t.startsWith(p);
+function getIntTag(e,prefix,def){try{for(const t of e.getTags())if(hasPrefix(t,prefix))return(parseInt(t.slice(prefix.length),10)|0)}catch{}return def|0}
 const Q=[];let qh=0;const SEEN=new Set();
 const PORTALS=new Map();
 const OWNERS=new Map();
@@ -110,6 +112,31 @@ function setConvTag(p){const e=p?.e;if(!e)return;const val=(p.convertedCount??0)
   try{e.addTag(TAG_CONV+val)}catch{}
 }
 
+function fallbackMossify(p,d){
+  if(!p||!d||p.mossFallbackDone) return;
+  const radius=Math.min(Math.max((p.radius??0)|0,12),64);
+  const cx=p.cx|0,cz=p.cz|0;
+  const by=p.bounds?(p.bounds.minY|0)-2:(p.cy|0)-8;
+  const ty=p.bounds?(p.bounds.maxY|0)+2:(p.cy|0)+8;
+  const r2=radius*radius;
+  for(let x=cx-radius;x<=cx+radius;x++){
+    const dx=x-cx;
+    for(let z=cz-radius;z<=cz+radius;z++){
+      const dz=z-cz;
+      if((dx*dx+dz*dz)>r2) continue;
+      for(let y=by;y<=ty;y++){
+        const b=gb(d,{x,y,z});
+        if(!b) continue;
+        const id=b.typeId;
+        if(!isNetherBlock(id)) continue;
+        const to=Math.random()<0.35?"minecraft:jungle_leaves":"minecraft:moss_block";
+        try{b.setType(to);}catch{}
+      }
+    }
+  }
+  p.mossFallbackDone=true;
+}
+
 // Convert all blocks that were corrupted by this portal back into moss or jungle leaves.
 // This runs when the portal frame is broken.  It iterates through the recorded
 // changeKeys, converts each block to moss or leaves and clears the change
@@ -118,6 +145,9 @@ function setConvTag(p){const e=p?.e;if(!e)return;const val=(p.convertedCount??0)
 // the corruption can start anew.
 function convertAllCorrupted(p,d){
   if(!p||!d) return;
+  if(!p.changeKeys?.length){
+    fallbackMossify(p,d);
+  }
   const keys=p.changeKeys;
   for(const k of keys){
     const {x,y,z}=parseKey(k);
@@ -223,7 +253,8 @@ function spawnChildPortals(parent,d,tick){
       childrenSpawned:false
       ,
       // tick when portal frame was last seen broken; used to stop moss after delay
-      brokenAt: undefined
+      brokenAt: undefined,
+      mossFallbackDone:false
     };
     PORTALS.set(pid,p);
     portalsDirty=true;
@@ -330,7 +361,8 @@ function upsertPortalAt(d,x,y,z){const bounds=computeBounds(d,x,y,z,24);if(!boun
     childrenSpawned:false
       ,
       // tick when portal frame was last seen broken; used to stop moss after delay
-      brokenAt: undefined
+      brokenAt: undefined,
+      mossFallbackDone:false
   };
   PORTALS.set(pid,p);portalsDirty=true;syncPortalAggro(p);setRadiusTag(p);setBoundsTags(p);
   // initialize conversion tag
@@ -349,11 +381,14 @@ function upsertPortalAt(d,x,y,z){const bounds=computeBounds(d,x,y,z,24);if(!boun
 function scanForNewPortals(d){for(const pl of world.getPlayers()){if(pl.dimension.id!==DIM)continue;const loc=pl.location,cx=loc.x|0,cy=loc.y|0,cz=loc.z|0,r=18;const vol=new BlockVolume({x:cx-r,y:cy-10,z:cz-r},{x:cx+r,y:cy+10,z:cz+r});const p=firstType(d,vol,PORTAL_ID);if(p)upsertPortalAt(d,p.x|0,p.y|0,p.z|0)}}
 function rebuildAnchors(d){let anchors=[];try{anchors=d.getEntities({type:ANCHOR_ID,tags:[TAG_PORTAL]})??[]}catch{}for(const e of anchors){try{const pid=ensurePidTag(e);if(PORTALS.has(pid))continue;const bio=getBioFromEntity(e),loc=e.location,cx=loc.x|0,cy=loc.y|0,cz=loc.z|0;const bounds=computeBounds(d,cx,cy,cz,28);
       initLivesIfMissing(e);armIfMissing(e,system.currentTick|0);
-      const p={pid,dimId:DIM,e,bounds:bounds??null,cx:bounds?(bounds.cx|0):cx,cy:bounds?(bounds.cy|0):cy,cz:bounds?(bounds.cz|0):cz,bio:bio|0,anger:0,spreadMul:1,mobMul:1,radius:4,step:0,rng:hashU32(pid),changes:new Map(),changeKeys:[],spreadDisabled:false,paused:false,sealed:false,gx:cx,gy:cy,gz:cz,lx:cx,ly:cy,lz:cz,lt:0,rt:-1};
+      const radius=Math.max(2,getIntTag(e,TAG_R,4));
+      const convertedCount=getIntTag(e,TAG_CONV,0);
+      const p={pid,dimId:DIM,e,bounds:bounds??null,cx:bounds?(bounds.cx|0):cx,cy:bounds?(bounds.cy|0):cy,cz:bounds?(bounds.cz|0):cz,bio:bio|0,anger:0,spreadMul:1,mobMul:1,radius:radius,step:0,rng:hashU32(pid),changes:new Map(),changeKeys:[],spreadDisabled:false,paused:false,sealed:false,gx:cx,gy:cy,gz:cz,lx:cx,ly:cy,lz:cz,lt:0,rt:-1,convertedCount:convertedCount,activeTicks:0,nextAngerSpawnTick:(system.currentTick|0)+1200,chunkLoaders:[],childrenSpawned:false,brokenAt:undefined,mossFallbackDone:false};
       PORTALS.set(pid,p);
       syncPortalAggro(p);
       setRadiusTag(p);
       setBoundsTags(p);
+      setConvTag(p);
       // When anchors are reconstructed from the loaded world data, the corruption queue is empty.
       // Seed the queue with several initial positions around the portal so that spreading
       // resumes immediately on reload. Without this, corruption may appear to stop after
@@ -469,6 +504,7 @@ function validatePortals(d,t){
       // Portal exists: reset broken state and unpause if needed
       if(p.brokenAt!==undefined){
         p.brokenAt=undefined;
+        p.mossFallbackDone=false;
       }
       if(p.paused){
         p.paused=false;
