@@ -21,18 +21,22 @@ const CFG=Object.freeze({
   // increase conversions per tick to improve spread and make corruption more aggressive
   // dramatically increase conversions per tick to make the corruption much more aggressive
   // increase conversions per tick to spread corruption much faster
-  conversionsPerTick:32,
+  // drastically reduce conversions per tick to slow the spread
+  conversionsPerTick:6,
   // allow more attempts per tick so the queue drains better
   // allow more attempts per tick so the queue drains better
-  maxAttemptsPerTick:80,
+  // fewer attempts per tick to throttle queue draining
+  maxAttemptsPerTick:40,
   // increase generation rates for more wave seeds
   // increase generation rates for more wave seeds and larger patches
-  genBase:60,
+  // reduce base seeds generated per wave for slower spread
+  genBase:15,
   genPerRadius:0.25,
-  genCap:200,
+  genCap:60,
   // increase number of cluster seeds generated per wave for more contiguous patches
   // increase number of cluster seeds generated per wave for more contiguous patches
-  clusterPerWave:6,
+  // fewer cluster seeds per wave yields smaller patches
+  clusterPerWave:2,
   maxQueue:2600,
   // limit underground conversion to shallow depths to avoid excessive underground spread
   undergroundDepth:1,
@@ -49,13 +53,15 @@ const CFG=Object.freeze({
   maxRadius:160,
   // increase growth per wave so radius expands steadily and more territory is covered
   // increase growth per wave to expand radius faster
-  growthPerWave:1.2,
+  // slow the radius expansion of corruption waves
+  growthPerWave:0.5,
   jitter:2.0,
   // enlarge corruption seed radius and seeds per hit for bigger, contiguous patches
   // bump seed parameters to generate larger contiguous infection patches
   // enlarge corruption seed radius and seeds per hit for bigger contiguous patches
-  seedRadius:8,
-  seedsPerHit:14,
+  // smaller seed radius for tighter infection zones
+  seedRadius:4,
+  seedsPerHit:6,
   revertPerTick:700,
   maxTrackedChanges:160000,
   seenCap:120000,
