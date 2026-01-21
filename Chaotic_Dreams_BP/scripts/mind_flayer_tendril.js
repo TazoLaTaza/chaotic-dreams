@@ -11,7 +11,7 @@
 import { world, system } from "@minecraft/server";
 
 const CFG = Object.freeze({
-  hostType: "minecraft:pig",
+  hostType: "minecraft:armor_stand",
   hostTag: "ik_host",             // add this tag to a pig to make it a tendril caster
   maxTargets: 4,                  // total players attacked simultaneously
   maxBranches: 3,                 // how many extra branches besides trunk (<= maxTargets-1)
@@ -46,10 +46,10 @@ const CFG = Object.freeze({
   groundProbeUp: 6,               // start this many blocks above tip
 
   // Visuals
-  particleCore: "flayed:dust_ambient",
-  particleSpark: "flayed:dust_core",
-  particleAura: "minecraft:portal_reverse_particle",
-  particleAnchor: "minecraft:soul_particle",
+particleCore: "minecraft:basic_smoke_particle",
+particleSpark: "minecraft:critical_hit_emitter",
+particleAnchor: "minecraft:explosion_particle",
+particleAura: "minecraft:basic_smoke_particle",
   auraRate: 2,                    // particles per update while active
   drawEveryJoint: true,
   drawExtraSparks: true,
@@ -449,29 +449,47 @@ function updateHost(hostState) {
     }
   }
 
-  // Launch logic (cooldown)
-  if (now >= hostState.nextCastTick && hostState.tendrils.length === 0) {
-    const targets = pickTargets(host);
-    if (targets.length) {
-      const trunkTarget = targets[0];
-      const trunk = makeTendril(hostState, trunkTarget);
-      hostState.tendrils.push(trunk);
+// inside updateHost(hostState), replace the "Launch logic (cooldown)" block with:
 
-      // Branches split from trunk mid-chain, each to a different player
+// Launch logic (cooldown)
+if (now >= hostState.nextCastTick && hostState.tendrils.length === 0) {
+  const targets = pickTargets(host);
+  if (targets.length) {
+    const trunkTarget = targets[0];
+    const trunk = makeTendril(hostState, trunkTarget);
+    hostState.tendrils.push(trunk);
+
+    const splitIndexBase = Math.max(3, Math.min(CFG.joints - 4, (CFG.joints * 0.45) | 0));
+
+    if (targets.length === 1) {
+      // Single-target mode: spawn extra tendrils at the same player (so it’s obvious in solo)
+      const extra = Math.min(2, CFG.maxBranches); // 2 extra -> total 3 tendrils
+      for (let i = 0; i < extra; i++) {
+        const br = makeTendril(hostState, trunkTarget, trunk, splitIndexBase + i);
+        // give each branch a slightly different initial tip offset for visibility
+        br.tip = {
+          x: br.tip.x + (Math.random() - 0.5) * 2.0,
+          y: br.tip.y + (Math.random() - 0.2) * 1.0,
+          z: br.tip.z + (Math.random() - 0.5) * 2.0,
+        };
+        hostState.tendrils.push(br);
+      }
+    } else {
+      // Multi-target mode: branches attack different players
       const branchCount = Math.min(CFG.maxBranches, targets.length - 1);
-      const splitIndex = Math.max(3, Math.min(CFG.joints - 4, (CFG.joints * 0.45) | 0));
       for (let i = 0; i < branchCount; i++) {
         const t = targets[i + 1];
-        hostState.tendrils.push(makeTendril(hostState, t, trunk, splitIndex));
+        hostState.tendrils.push(makeTendril(hostState, t, trunk, splitIndexBase));
       }
-
-      const jitter = (Math.random() * CFG.cooldownJitter) | 0;
-      hostState.nextCastTick = now + CFG.cooldownTicks + jitter;
-    } else {
-      // If no targets, check again soon without spamming scans
-      hostState.nextCastTick = now + 20;
     }
+
+    const jitter = (Math.random() * CFG.cooldownJitter) | 0;
+    hostState.nextCastTick = now + CFG.cooldownTicks + jitter;
+  } else {
+    hostState.nextCastTick = now + 20;
   }
+}
+
 
   // Update tendrils
   const alive = [];
@@ -492,23 +510,19 @@ function scanHosts() {
   for (const dimId of DIM_IDS) {
     let dim;
     try { dim = world.getDimension(dimId); } catch { continue; }
+
+    const q = CFG.hostType
+      ? { type: CFG.hostType, tags: [CFG.hostTag] }
+      : { tags: [CFG.hostTag] };
+
     let hosts = [];
-    try { hosts = dim.getEntities({ type: CFG.hostType, tags: [CFG.hostTag] }); } catch { continue; }
+    try { hosts = dim.getEntities(q); } catch { continue; }
 
     for (const h of hosts) {
       if (!isValid(h)) continue;
-      if (!ACTIVE_BY_HOST.has(h.id)) {
-        ACTIVE_BY_HOST.set(h.id, {
-          host: h,
-          dim,
-          nextCastTick: now + 20,
-          tendrils: [],
-        });
-      } else {
-        const st = ACTIVE_BY_HOST.get(h.id);
-        st.host = h;
-        st.dim = dim;
-      }
+      const st = ACTIVE_BY_HOST.get(h.id);
+      if (!st) ACTIVE_BY_HOST.set(h.id, { host: h, dim, nextCastTick: now + 20, tendrils: [] });
+      else { st.host = h; st.dim = dim; }
     }
   }
 }
