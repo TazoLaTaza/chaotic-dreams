@@ -136,6 +136,28 @@ function convertAllCorrupted(p,d){
   }catch{}
 }
 
+// Remove all queued conversion tasks for a given portal id.  Without purging,
+// entries in the global queue belonging to a broken portal will continue to
+// consume processing time and may stall conversion for other portals.  This
+// helper scans the queue from the current head (qh) and rebuilds it
+// omitting any tasks matching the specified pid.  It leaves the
+// PROBE_Q untouched since probe tasks are inexpensive and can be skipped.
+function purgeQueueForPid(pid){
+  if(!pid||Q.length===0) return;
+  const newQ=[];
+  // Process only the unconsumed portion of the queue.  Tasks before qh
+  // have either been processed or skipped, so rebuilding from qh onward
+  // suffices.  We then reset qh and assign the filtered tasks back.
+  for(let i=qh;i<Q.length;i++){
+    const task=Q[i];
+    if(task.pid!==pid) newQ.push(task);
+  }
+  // Reset the queue and repopulate it with retained tasks
+  Q.length=0;
+  qh=0;
+  for(const t of newQ) Q.push(t);
+}
+
 // Spawn four child corruption anchors at the edges of an existing corruption radius.
 // Child portals inherit the biome of the parent and are tagged to disable nest/dome construction.
 // They are created only once per parent when the activeTicks exceed CHILD_SPAWN_TICKS.
@@ -330,6 +352,18 @@ function rebuildAnchors(d){let anchors=[];try{anchors=d.getEntities({type:ANCHOR
         const sz = bounds ? ri(bounds.minZ,bounds.maxZ) : cz;
         enqueue(sx,by,sz,bio,pid);
       }
+      // Spawn chunk loading entities for the reconstructed portal.  When players leave
+      // and rejoin, the previous p.chunkLoaders array will be lost, so respawn loaders
+      // to ensure the corruption area stays loaded.  These loaders will be repositioned
+      // each tick by updateChunkLoaders.
+      try{
+        const loaders = 6;
+        p.chunkLoaders = [];
+        for(let i=0;i<loaders;i++){
+          const loader = d.spawnEntity("netherlands:chunk_loading", { x: (bounds ? bounds.cx : cx) + 0.5, y: (bounds ? bounds.minY : cy) + 1, z: (bounds ? bounds.cz : cz) + 0.5 });
+          p.chunkLoaders.push(loader);
+        }
+      }catch{}
     }catch{}}
   portalsDirty=true
 }
@@ -425,10 +459,10 @@ function validatePortals(d,t){
       }
       continue;
     }
-    // No portal blocks present: convert all corrupted blocks back to moss and leaves
-    // but do NOT pause the portal or mark it broken.  The corruption and defense
-    // will continue to operate, and players can still see the nest/dome form.
+    // No portal blocks present: convert all corrupted blocks back to moss/leaves.
+    // Purge any queued tasks for this portal so they don't stall conversion for others.
     convertAllCorrupted(p,d);
+    purgeQueueForPid(pId);
   }
 }
 const esc=s=>String(s??"").replace(/\\/g,"\\\\").replace(/\"/g,"\\\"");
