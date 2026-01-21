@@ -128,17 +128,35 @@ const isPlant = (id) =>
    without enumerating every single id.
 --------------------------------------------------------- */
 
+const NETHER_KEYWORDS = [
+  "nether",
+  "crimson",
+  "warped",
+  "nylium",
+  "nyliums",
+  "soul",
+  "basalt",
+  "blackstone",
+  "quartz",
+  "wart",
+  "fungus",
+  "hyphae",
+  "stem",
+  "wart_block",
+  "ancient_debris",
+  "netherite",
+  "magma",
+  "lava",
+  "respawn_anchor",
+  "lodestone",
+  "nether_brick",
+  "nether_bricks",
+];
+
 function isNetherBlock(id) {
   if (typeof id !== "string") return false;
   const s = id.toLowerCase();
-  // common nether keywords in vanilla block ids
-  const keywords = [
-    "nether", "crimson", "warped", "nylium", "nyliums", "nylium",
-    "soul", "basalt", "blackstone", "quartz", "wart", "fungus",
-    "hyphae", "stem", "wart_block", "ancient_debris", "netherite",
-    "magma", "lava", "respawn_anchor", "lodestone", "nether_brick", "nether_bricks"
-  ];
-  return keywords.some(k => s.includes(k));
+  return NETHER_KEYWORDS.some((keyword) => s.includes(keyword));
 }
 
 /* ---------------------------------------------------------
@@ -243,11 +261,12 @@ export function getConversionTarget(typeId, biome, surface) {
 
   // Treat any vanilla nether-themed block as immune (covers Bedrock nether blocks)
   if (isNetherBlock(typeId)) return null;
-// allow water -> lava conversion
-if (typeId === "minecraft:water") return "minecraft:lava";
-if (typeId === "minecraft:flowing_water") return "minecraft:flowing_lava";
-// keep other liquids (lava) untouched
-if (isLiquid(typeId) && !typeId.includes("water")) return null;
+
+  // allow water -> lava conversion
+  if (typeId === "minecraft:water") return "minecraft:lava";
+  if (typeId === "minecraft:flowing_water") return "minecraft:flowing_lava";
+  // keep other liquids (lava) untouched
+  if (isLiquid(typeId) && !typeId.includes("water")) return null;
 
   const b = biome | 0;
 

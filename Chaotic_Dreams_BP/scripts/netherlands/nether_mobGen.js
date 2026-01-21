@@ -17,6 +17,7 @@ const MOB_CHECK_EVERY = 20;  // ticks
 // spread-point memory (used to spawn mobs near the “front”)
 const POINTS = [];
 const POINT_CAP = 96;
+const LAST_POINT = new Map();
 
 const gb = (d, p) => { try { return d.getBlock(p); } catch { return undefined; } };
 
@@ -29,16 +30,18 @@ function getDimSafe(dimId) {
   try { return world.getDimension(dimId); } catch { return undefined; }
 }
 
+function lastPointKey(pid, dimId) {
+  return `${pid}|${dimId}`;
+}
+
 function lastPointFor(pid, dimId) {
-  for (let i = POINTS.length - 1; i >= 0; i--) {
-    const p = POINTS[i];
-    if (p.pid === pid && p.dimId === dimId) return p;
-  }
-  return null;
+  return LAST_POINT.get(lastPointKey(pid, dimId)) ?? null;
 }
 
 export function recordSpreadPoint(dimId, x, y, z, bio, pid) {
-  POINTS.push({ dimId, x, y, z, bio: bio | 0, pid, t: Date.now() });
+  const point = { dimId, x, y, z, bio: bio | 0, pid, t: Date.now() };
+  POINTS.push(point);
+  LAST_POINT.set(lastPointKey(pid, dimId), point);
   if (POINTS.length > POINT_CAP) POINTS.splice(0, POINTS.length - POINT_CAP);
 }
 
