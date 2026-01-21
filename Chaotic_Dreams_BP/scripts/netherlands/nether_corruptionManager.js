@@ -77,14 +77,11 @@ const TAG_NONEST="nc_nonest";
 const N4=[{x:1,z:0},{x:-1,z:0},{x:0,z:1},{x:0,z:-1}],N8=[...N4,{x:1,z:1},{x:1,z:-1},{x:-1,z:1},{x:-1,z:-1}],GOLDEN_ANGLE=2.399963229728653;
 const log=(...a)=>{if(CFG.debug)console.warn("[NetherCorr]",...a)};
 const gb=(d,p)=>{try{return d.getBlock(p)}catch{return}},dim=()=>{try{return world.getDimension(DIM)}catch{return}};
-const AIR_IDS=new Set(["minecraft:air","minecraft:cave_air","minecraft:void_air"]);
-const WATER_IDS=new Set(["minecraft:water","minecraft:flowing_water"]);
-const EXPOSURE_IDS=new Set(["minecraft:lava",PORTAL_ID,"minecraft:fire","minecraft:soul_fire"]);
-const isAir=id=>AIR_IDS.has(id);
-const isWater=id=>WATER_IDS.has(id);
-const isExposure=id=>isAir(id)||isWater(id)||EXPOSURE_IDS.has(id);
-const posKey=(x,y,z)=>`${x}|${y}|${z}`;
-const parseKey=k=>{const i0=k.indexOf("|");const i1=k.indexOf("|",i0+1);return{x:k.slice(0,i0)|0,y:k.slice(i0+1,i1)|0,z:k.slice(i1+1)|0}};
+const isAir=id=>id==="minecraft:air"||id==="minecraft:cave_air"||id==="minecraft:void_air";
+const isWater=id=>id==="minecraft:water"||id==="minecraft:flowing_water";
+const isExposure=id=>isAir(id)||isWater(id)||id==="minecraft:lava"||id===PORTAL_ID||id==="minecraft:fire"||id==="minecraft:soul_fire";
+const posKey=(x,y,z)=>x+"|"+y+"|"+z;
+const parseKey=k=>{const[a,b,c]=k.split("|");return{x:a|0,y:b|0,z:c|0}};
 const Q=[];let qh=0;const SEEN=new Set();
 const PORTALS=new Map();
 const OWNERS=new Map();
@@ -401,14 +398,7 @@ function trySurfaceSnap(d,x,y0,z){const b0=gb(d,{x,y:y0,z});if(!b0)return;
 function findTarget(d,x,yHint,z,bio,tick,p){let y0=colGet(DIM,x,z,tick);if(y0==null)y0=yHint|0;
   const ys=trySurfaceSnap(d,x,y0,z);if(ys!=null){const b=gb(d,{x,y:ys,z});if(b){const to=getConversionTarget(b.typeId,bio,true);if(to){colSet(DIM,x,z,ys,tick);return{x,y:ys,z,to}}}}
   const r=CFG.ySearchRadius;
-  for(let i=0;i<=r;i++){
-    if(i===0){
-      const b=gb(d,{x,y:y0,z});if(!b||isAir(b.typeId))continue;const a=gb(d,{x,y:y0+1,z});if(!(a&&isExposure(a.typeId))&&!sideExposed(d,x,y0,z))continue;const to=getConversionTarget(b.typeId,bio,true);if(!to)continue;colSet(DIM,x,z,y0,tick);return{x,y:y0,z,to};
-    }else{
-      let yy=y0+i;let b=gb(d,{x,y:yy,z});if(b&&!isAir(b.typeId)){const a=gb(d,{x,y:yy+1,z});if((a&&isExposure(a.typeId))||sideExposed(d,x,yy,z)){const to=getConversionTarget(b.typeId,bio,true);if(to){colSet(DIM,x,z,yy,tick);return{x,y:yy,z,to}}}}
-      yy=y0-i;b=gb(d,{x,y:yy,z});if(!b||isAir(b.typeId))continue;const a=gb(d,{x,y:yy+1,z});if(!(a&&isExposure(a.typeId))&&!sideExposed(d,x,yy,z))continue;const to=getConversionTarget(b.typeId,bio,true);if(!to)continue;colSet(DIM,x,z,yy,tick);return{x,y:yy,z,to};
-    }
-  }
+  for(let i=0;i<=r;i++)for(const yy of(i?[y0+i,y0-i]:[y0])){const b=gb(d,{x,y:yy,z});if(!b||isAir(b.typeId))continue;const a=gb(d,{x,y:yy+1,z});if(!(a&&isExposure(a.typeId))&&!sideExposed(d,x,yy,z))continue;const to=getConversionTarget(b.typeId,bio,true);if(!to)continue;colSet(DIM,x,z,yy,tick);return{x,y:yy,z,to}}
   if(p&&CFG.recenterOnSolid&&((tick%CFG.recenterModulo)===0)){const b=gb(d,{x,y:y0,z});if(b&&!isAir(b.typeId)){const a=gb(d,{x,y:y0+1,z});if(a&&isExposure(a.typeId))colSet(DIM,x,z,y0,tick)}}
   requestProbe(x,y0,z,bio,p.pid,tick);
 }
