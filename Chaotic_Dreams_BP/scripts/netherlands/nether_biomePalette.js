@@ -154,7 +154,7 @@ const NETHER_KEYWORDS = [
   "nether_bricks",
 ];
 
-function isNetherBlock(id) {
+export function isNetherBlock(id) {
   if (typeof id !== "string") return false;
   const s = id.toLowerCase();
   return NETHER_KEYWORDS.some((keyword) => s.includes(keyword));
