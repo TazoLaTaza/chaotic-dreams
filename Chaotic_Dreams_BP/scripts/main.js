@@ -1,5 +1,5 @@
 import "./creeper_spores";
-import "./mind_flayer_tendril";
+import "./tendril";
 import "./netherlands/nether_cache";
 import "./netherlands/nether_mobGen";
 import "./netherlands/nether_biomePalette";
