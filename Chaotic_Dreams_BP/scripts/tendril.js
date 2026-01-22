@@ -1,119 +1,118 @@
+// flayerTendrils.js – minimal tendril system with error logging (beta 2.4.0)
 import { system, world } from "@minecraft/server";
 
-const CFG=Object.freeze({host:"chaoticdreams:flayer_tendril",tendrils:3,joints:14,seg:0.6,solve:2,follow:0.22,noise:0.14,smooth:0.55,range:48,interval:2,core:"flayed:dust_core",body:"flayed:dust",hit:"flayed:dust_core"});
-const DIMS=["overworld","nether","the_end"];
-const S=new Map();let tid=1;
+const HOST_TYPE = "chaoticdreams:flayer_tendril";
+const TENDRIL_COUNT = 3;
+const JOINTS = 14;
+const SEG_LEN = 0.6;
+const INTERVAL = 2;
+const HOSTS = new Map();
 
-const v=(x=0,y=0,z=0)=>({x,y,z});
-const add=(a,b)=>v(a.x+b.x,a.y+b.y,a.z+b.z);
-const sub=(a,b)=>v(a.x-b.x,a.y-b.y,a.z-b.z);
-const mul=(a,s)=>v(a.x*s,a.y*s,a.z*s);
-const len=a=>Math.hypot(a.x,a.y,a.z);
-const nrm=a=>{const m=len(a)||1e-6;return mul(a,1/m)};
-const lerp=(a,b,t)=>v(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t,a.z+(b.z-a.z)*t);
-const isV=e=>{try{return !!e&&e.isValid()}catch{return false}};
-const pfx=(dim,id,p)=>{try{dim.spawnParticle(id,p)}catch{try{dim.runCommandAsync(`particle ${id} ${p.x} ${p.y} ${p.z}`)}catch{}}};
+// Vector helpers
+const vec = (x=0,y=0,z=0)=>({x,y,z});
+const add = (a,b)=>vec(a.x+b.x,a.y+b.y,a.z+b.z);
+const sub = (a,b)=>vec(a.x-b.x,a.y-b.y,a.z-b.z);
+const mul = (a,s)=>vec(a.x*s,a.y*s,a.z*s);
+const len = a => Math.hypot(a.x,a.y,a.z);
+const norm = a => { const l=len(a)||1e-6; return mul(a,1/l); };
+const lerp = (a,b,t)=>vec(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t,a.z+(b.z-a.z)*t);
 
-function players(){try{return world.getAllPlayers?world.getAllPlayers():world.getPlayers()}catch{return[]}}
-function nearestTarget(dim,from){
-  const rr=CFG.range*CFG.range;let best=null,bd=1e30;
-  for(const p of players()){
-    if(!isV(p))continue;
-    try{if(p.dimension.id!==dim.id)continue}catch{continue}
-    const l=p.location,dx=l.x-from.x,dy=l.y-from.y,dz=l.z-from.z,d2=dx*dx+dy*dy+dz*dz;
-    if(d2<bd&&d2<=rr){bd=d2;best=p;}
+// Get players in current API (works in beta 2.4.0)
+const getPlayers=()=>{try{return world.getAllPlayers();}catch{return world.getPlayers();}};
+
+// Find nearest player within a range
+function nearest(dim, from, range){
+  let best=null, bd=range*range;
+  for(const p of getPlayers()){
+    if(!p?.isValid()||p.dimension.id!==dim.id) continue;
+    const l=p.location, dx=l.x-from.x, dy=l.y-from.y, dz=l.z-from.z;
+    const d2=dx*dx+dy*dy+dz*dz;
+    if(d2<bd){bd=d2;best=p;}
   }
   return best;
 }
 
-function initOne(root,seed,ang){
-  const base=add(root,v(0,1.1,0));
-  const dir=v(Math.cos(ang),0,Math.sin(ang));
-  const pts=new Array(CFG.joints),prev=new Array(CFG.joints);
-  for(let i=0;i<CFG.joints;i++){
-    const p=add(base,mul(dir,i*CFG.seg));
-    pts[i]=p;prev[i]={...p};
+// Initialize tendril chains for a new host
+function initHost(entity){
+  const tList=[];
+  for(let t=0;t<TENDRIL_COUNT;t++){
+    const pts=[];
+    for(let i=0;i<JOINTS;i++){
+      // start slightly up so it doesn’t spawn inside the mob
+      pts.push(vec(entity.location.x, entity.location.y+1+i*(SEG_LEN*0.35), entity.location.z));
+    }
+    tList.push({pts, tip:{...pts[pts.length-1]}, vel:vec()});
   }
-  return {seed,ang,pts,prev,tip:{...pts[CFG.joints-1]},vel:v()};
+  HOSTS.set(entity.id,{e:entity, dim:entity.dimension, tList});
 }
 
-function initHost(e){
-  const id=e.id,dim=e.dimension,root=e.location;
-  const list=[];for(let i=0;i<CFG.tendrils;i++){
-    const ang=(i/CFG.tendrils)*Math.PI*2+((Math.random()*0.6)-0.3);
-    list.push(initOne(root,tid++,ang));
+// FABRIK solver (no obstacle avoidance)
+function solveFABRIK(pts, base, tip){
+  const total=SEG_LEN*(pts.length-1);
+  const d=len(sub(base,tip));
+  if(d>total){
+    const dir=norm(sub(tip,base));
+    pts[0]={...base};
+    for(let i=1;i<pts.length;i++)pts[i]=add(pts[i-1],mul(dir,SEG_LEN));
+    return;
   }
-  S.set(id,{e,dim,next:0,list});
-}
-
-function solveChain(tr,root,goal,tick){
-  const base=add(root,v(0,1.1,0));
-  const wob=CFG.noise,tt=tick*0.18+tr.seed*0.13;
-  const n=v(Math.sin(tt)*wob,Math.cos(tt*0.7)*wob*0.8,Math.sin(tt*0.9)*wob);
-  const desired=add(goal,n);
-
-  const tipDir=nrm(sub(desired,tr.tip));
-  tr.vel=lerp(tr.vel,mul(tipDir,CFG.follow),0.55);
-  tr.tip=add(tr.tip,tr.vel);
-
-  let pts=tr.pts,tmp=pts.map(p=>({...p}));
-  for(let k=0;k<CFG.solve;k++){
-    tmp[tmp.length-1]={...tr.tip};
+  const tmp=pts.map(p=>({...p}));
+  for(let k=0;k<2;k++){
+    tmp[tmp.length-1]={...tip};
     for(let i=tmp.length-2;i>=0;i--){
-      const d=nrm(sub(tmp[i],tmp[i+1]));
-      tmp[i]=add(tmp[i+1],mul(d,CFG.seg));
+      const dir=norm(sub(tmp[i],tmp[i+1]));
+      tmp[i]=add(tmp[i+1],mul(dir,SEG_LEN));
     }
     tmp[0]={...base};
     for(let i=1;i<tmp.length;i++){
-      const d=nrm(sub(tmp[i],tmp[i-1]));
-      tmp[i]=add(tmp[i-1],mul(d,CFG.seg));
+      const dir=norm(sub(tmp[i],tmp[i-1]));
+      tmp[i]=add(tmp[i-1],mul(dir,SEG_LEN));
     }
   }
-
-  for(let i=0;i<pts.length;i++){
-    pts[i]=lerp(pts[i],tmp[i],1-CFG.smooth);
-    tr.prev[i]=pts[i];
-  }
-  tr.tip={...pts[pts.length-1]};
+  for(let i=0;i<pts.length;i++)pts[i]=lerp(pts[i],tmp[i],0.45);
 }
 
-function draw(dim,tr){
-  for(let i=0;i<tr.pts.length;i++){
-    pfx(dim,i===0?CFG.core:CFG.body,tr.pts[i]);
-    if((i&3)===0)pfx(dim,CFG.hit,tr.pts[i]);
-  }
+// Log helper to see errors
+function log(msg){
+  try{world.sendMessage(`§7[Flayer] ${msg}`);}catch{}
 }
 
-function tick(){
-  const now=system.currentTick|0;
+// Subscribe to spawns of the flayer entity, guarded by try/catch so errors don’t kill the script
+try{
+  world.afterEvents.entitySpawn.subscribe(ev=>{
+    try{
+      const e=ev.entity;
+      if(e?.typeId===HOST_TYPE){
+        initHost(e);
+        log(`spawned: ${e.id}`);
+      }
+    }catch(ex){ log(`spawn handler error: ${ex}`); }
+  });
+}catch(err){ log(`entitySpawn subscription failed: ${err}`); }
 
-  for(const [id,st] of S){
-    if(!isV(st.e)){S.delete(id);continue}
-    st.dim=st.e.dimension;
-    const root=st.e.location;
-    const tgt=nearestTarget(st.dim,root);
-    if(!tgt)continue;
-    const goal=add(tgt.location,v(0,1.2,0));
-    for(const tr of st.list){
-      solveChain(tr,root,goal,now);
-      draw(st.dim,tr);
+// Update loop; guarded so one error doesn’t kill all updates
+system.runInterval(()=>{
+  try{
+    for(const [id,host] of HOSTS){
+      if(!host.e?.isValid()){ HOSTS.delete(id); continue; }
+      const base=host.e.location;
+      const target=nearest(host.dim, base, 48);
+      if(!target) continue;
+      const goal=vec(target.location.x, target.location.y+1.2, target.location.z);
+      for(const tr of host.tList){
+        // tip velocity smoothing
+        const to=sub(goal,tr.tip), dir=norm(to);
+        const desired=mul(dir,0.5);
+        tr.vel=lerp(tr.vel,desired,0.55);
+        tr.tip=add(tr.tip,tr.vel);
+        // FABRIK solve and particle drawing
+        solveFABRIK(tr.pts, vec(base.x, base.y+1, base.z), tr.tip);
+        for(let i=0;i<tr.pts.length;i++){
+          const p=tr.pts[i];
+          // use your own particles or default smoke
+          host.dim.spawnParticle(i===0? "minecraft:basic_smoke_particle":"minecraft:basic_smoke_particle", p);
+        }
+      }
     }
-  }
-}
-
-function scanExisting(){
-  for(const did of DIMS){
-    let dim;try{dim=world.getDimension(did)}catch{continue}
-    let arr=[];try{arr=dim.getEntities({type:CFG.host})||[]}catch{arr=[]}
-    for(const e of arr) if(isV(e)&&!S.has(e.id)) initHost(e);
-  }
-}
-
-world.afterEvents?.entitySpawn?.subscribe?.(ev=>{
-  const e=ev.entity;
-  if(!e||e.typeId!==CFG.host) return;
-  system.run(()=>{if(isV(e)) initHost(e);});
-});
-
-scanExisting();
-system.runInterval(tick,CFG.interval);
+  }catch(ex){ log(`update error: ${ex}`); }
+}, INTERVAL);
