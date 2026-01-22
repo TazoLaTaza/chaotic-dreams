@@ -1,83 +1,132 @@
 {
- "format_version": "1.21.50",
-    "minecraft:entity": {
-   "description": {
-    "identifier": "chaoticdreams:flayer_tendril",
-    "is_spawnable": false,
-    "is_summonable": true,
-    "is_experimental": false
-  },
-		"component_groups": {
-				"despawn": {
-				"minecraft:instant_despawn": {}
-			}
-		},
-  "components": {
-           "minecraft:collision_box": {
-				"height": 0.1,
-				"width": 0.1
-			},
-            "minecraft:tick_world": {
-				"distance_to_players": 128,
-				"never_despawn": true,
-				"radius": 4
-			},
-			"minecraft:health": {
-				"value": 60
-			},
-			"minecraft:physics": {
-				"has_collision": false,
-				"has_gravity": false
-			},
-			"minecraft:on_death": {
-				"event": "netherlands:death"
-			}
-			  },
-		"events": {
+  "format_version": "1.21.50",
+  "minecraft:entity": {
+    "description": {
+      "identifier": "chaoticdreams:flayer_tendril",
+      "is_spawnable": false,
+      "is_summonable": true,
+      "is_experimental": false
+    },
+    "component_groups": {
+      "despawn": {
+        "minecraft:instant_despawn": {}
+      }
+    },
+    "components": {
+      "minecraft:collision_box": {
+        "height": 2,
+        "width": 2
+      },
+      "minecraft:tick_world": {
+        "never_despawn": true,
+        "radius": 2
+      },
+      "minecraft:behavior.float_wander": {
+        "xz_dist": 10,
+        "y_dist": 7,
+        "y_offset": 0,
+        "must_reach": false,
+        "random_reselect": false
+      },
+      "minecraft:behavior.nearest_attackable_target": {
+        "priority": 4,
+        "within_radius": 50,
+        "attack_interval": 10,
+        "must_see": true,
+        "entity_types": [
+          {
+            "filters": {
+              "all_of": [
+                {
+                  "test": "is_family",
+                  "subject": "other",
+                  "operator": "!=",
+                  "value": "fish"
+                },
+                {
+                  "test": "is_family",
+                  "subject": "other",
+                  "operator": "!=",
+                  "value": "squid"
+                },
+                {
+                  "test": "is_family",
+                  "subject": "other",
+                  "operator": "!=",
+                  "value": "inanimate"
+                },
+                {
+                  "test": "is_family",
+                  "subject": "other",
+                  "operator": "!=",
+                  "value": "phantom"
+                },
+                {
+                  "any_of": [
+                    {
+                      "test": "has_equipment",
+                      "subject": "other",
+                      "domain": "hand",
+                      "operator": "!=",
+                      "value": "shield"
+                    },
+                    {
+                      "test": "is_sneaking",
+                      "subject": "other",
+                      "operator": "!=",
+                      "value": true
+                    },
+                    {
+                      "test": "is_underwater",
+                      "subject": "target",
+                      "operator": "!=",
+                      "value": true
+                    }
+                  ]
+                }
+              ]
+            },
+            "max_dist": 64,
+            "priority": 1
+          }
+        ],
+        "reselect_targets": false
+      },
+      "minecraft:health": {
+        "value": 60
+      },
+      "minecraft:movement": {
+        "value": 0.0002
+      },
+      "minecraft:movement.glide": {
+        "start_speed": 0.01,
+        "speed_when_turning": 0.01,
+        "max_turn": 0.001
+      },
+      "minecraft:physics": {
+        "has_collision": false,
+        "has_gravity": false
+      },
+      "minecraft:on_death": {
+        "event": "death"
+      }
+    },
+    "events": {
       "minecraft:entity_spawned": {
-"randomize": [
-  {
-    "weight": 1,
-    "queue_command": {
-         "command":[
-          "function nether_angerA"
-         ]
-    }
-  },
-    {
-          "weight": 1,
-    "queue_command": {
-         "command":[
-          "function nether_angerB"
-         ]
-    }
-  },
-    {
-          "weight": 1,
-    "queue_command": {
-         "command":[
-          "function nether_angerC"
-         ]
-    }
-  },
-    {
-          "weight": 1,
-    "queue_command": {
-         "command":[
-          "function nether_angerD"
-         ]
+        "randomize": [
+          {
+            "weight": 1,
+            "queue_command": {
+              "command": ["camerashake add @a[r=15] 0.04 5 positional"]
+            }
+          }
+        ]
+      },
+      "death": {
+        "add": {
+          "component_groups": ["despawn"]
+        }
+      }
     }
   }
-]
-
-      },
-			"netherlands:death": {
-				"add": {
-					"component_groups": [
-						"despawn"
-					]
-				}
-			}
-		}
-	}
 }
